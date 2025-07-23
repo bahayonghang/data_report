@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据分析报告工具</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Web 数据分析报告工具</h1>
+        
+        <div id="file-selection">
+            <!-- 文件上传和选择区域 -->
+            <!-- TODO: 实现文件上传和服务器文件选择界面 -->
+        </div>
+        
+        <div id="loading" style="display: none;">
+            <!-- 加载状态指示器 -->
+            <p>正在分析数据...</p>
+        </div>
+        
+        <div id="results">
+            <!-- 分析结果展示区域 -->
+        </div>
+        
+        <div id="error" style="display: none; color: red;">
+            <!-- 错误信息显示区域 -->
+        </div>
+    </div>
+    
+    <script src="/static/app.js"></script>
+</body>
+</html>
