@@ -30,13 +30,13 @@ def create_time_series_plot(
     fig = go.Figure()
 
     # 获取时间数据
-    time_data = df[time_col].to_numpy()
+    time_data = df[time_col].to_list()  # 改为to_list()确保是Python列表
     colors = get_color_sequence(len(value_cols))
 
     # 为每个数值列添加一条线
     for i, col in enumerate(value_cols):
         if col != time_col:  # 确保不包含时间列本身
-            y_data = df[col].to_numpy()
+            y_data = df[col].to_list()  # 改为to_list()确保是Python列表
             fig.add_trace(
                 go.Scatter(
                     x=time_data,
@@ -115,7 +115,7 @@ def create_distribution_plots(
 
     for i, col in enumerate(columns):
         # 获取非空数据
-        data = df[col].drop_nulls().to_numpy()
+        data = df[col].drop_nulls().to_list()  # 改为to_list()
 
         if len(data) == 0:
             continue
@@ -167,7 +167,7 @@ def create_box_plots(
 
     for i, col in enumerate(columns):
         # 获取非空数据
-        data = df[col].drop_nulls().to_numpy()
+        data = df[col].drop_nulls().to_list()  # 改为to_list()
 
         if len(data) == 0:
             continue
@@ -233,13 +233,13 @@ def create_summary_dashboard(
 
     # 时间序列 (只显示前3个变量以避免过于拥挤)
     display_cols = numeric_cols[:3] if len(numeric_cols) > 3 else numeric_cols
-    time_data = df[time_col].to_numpy()
+    time_data = df[time_col].to_list()  # 改为to_list()
 
     for i, col in enumerate(display_cols):
         fig.add_trace(
             go.Scatter(
                 x=time_data,
-                y=df[col].to_numpy(),
+                y=df[col].to_list(),  # 改为to_list()
                 name=col,
                 mode="lines",
                 line=dict(width=2, color=colors[i % len(colors)]),
@@ -273,7 +273,7 @@ def create_summary_dashboard(
     # 数据分布 (第一个数值列)
     if numeric_cols:
         first_col = numeric_cols[0]
-        data = df[first_col].drop_nulls().to_numpy()
+        data = df[first_col].drop_nulls().to_list()  # 改为to_list()
         fig.add_trace(
             go.Histogram(
                 x=data,
@@ -290,7 +290,7 @@ def create_summary_dashboard(
     # 箱形图 (第一个数值列)
     if numeric_cols:
         first_col = numeric_cols[0]
-        data = df[first_col].drop_nulls().to_numpy()
+        data = df[first_col].drop_nulls().to_list()  # 改为to_list()
         fig.add_trace(
             go.Box(
                 y=data,
@@ -332,12 +332,12 @@ def create_advanced_time_series(
         return {"error": "没有可用的数值列"}
 
     fig = go.Figure()
-    time_data = df[time_col].to_numpy()
+    time_data = df[time_col].to_list()  # 改为to_list()
     colors = get_color_sequence(len(value_cols))
 
     for i, col in enumerate(value_cols):
         if col != time_col:
-            y_data = df[col].to_numpy()
+            y_data = df[col].to_list()  # 改为to_list()
 
             # 主要数据线
             fig.add_trace(
@@ -359,7 +359,7 @@ def create_advanced_time_series(
                 if window_size > 2:
                     trend_data = df.select(
                         pl.col(col).rolling_mean(window_size).alias("trend")
-                    )["trend"].to_numpy()
+                    )["trend"].to_list()  # 改为to_list()
 
                     fig.add_trace(
                         go.Scatter(

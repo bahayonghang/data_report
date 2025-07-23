@@ -6,27 +6,137 @@
     <title>数据分析报告工具</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <h1>Web 数据分析报告工具</h1>
+        <!-- 页面标题 -->
+        <header class="header">
+            <h1><i class="fas fa-chart-line"></i> Web 数据分析报告工具</h1>
+            <p class="subtitle">上传或选择时序数据文件，获得自动化分析报告</p>
+        </header>
         
-        <div id="file-selection">
-            <!-- 文件上传和选择区域 -->
-            <!-- TODO: 实现文件上传和服务器文件选择界面 -->
-        </div>
+        <!-- 文件选择区域 -->
+        <section class="file-section">
+            <h2><i class="fas fa-file-upload"></i> 选择数据文件</h2>
+            
+            <!-- 文件上传区域 -->
+            <div class="upload-area">
+                <h3>上传本地文件</h3>
+                <div class="upload-zone" id="upload-zone">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>拖拽文件到此处或点击选择文件</p>
+                        <p class="upload-hint">支持 CSV 和 Parquet 格式，最大 100MB</p>
+                        <input type="file" id="file-input" accept=".csv,.parquet" hidden>
+                        <button class="btn btn-primary" id="upload-btn">
+                            <i class="fas fa-plus"></i> 选择文件
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 分隔线 -->
+            <div class="divider">
+                <span>或</span>
+            </div>
+            
+            <!-- 服务器文件选择区域 -->
+            <div class="server-files">
+                <h3>选择服务器文件</h3>
+                <div class="server-file-list" id="server-file-list">
+                    <div class="loading-files">
+                        <i class="fas fa-spinner fa-spin"></i> 正在加载文件列表...
+                    </div>
+                </div>
+            </div>
+        </section>
         
-        <div id="loading" style="display: none;">
-            <!-- 加载状态指示器 -->
-            <p>正在分析数据...</p>
-        </div>
+        <!-- 进度和状态区域 -->
+        <section class="status-section" id="status-section" style="display: none;">
+            <div class="progress-container">
+                <div class="progress-header">
+                    <h3 id="status-title">正在分析数据...</h3>
+                    <button class="btn btn-secondary btn-sm" id="cancel-btn" style="display: none;">
+                        <i class="fas fa-times"></i> 取消
+                    </button>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <p class="progress-text" id="progress-text">正在加载数据文件...</p>
+            </div>
+        </section>
         
-        <div id="results">
-            <!-- 分析结果展示区域 -->
-        </div>
+        <!-- 错误信息区域 -->
+        <section class="error-section" id="error-section" style="display: none;">
+            <div class="error-content">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>分析失败</h3>
+                <p id="error-message">发生了未知错误</p>
+                <div class="error-actions">
+                    <button class="btn btn-primary" id="retry-btn">
+                        <i class="fas fa-redo"></i> 重试
+                    </button>
+                    <button class="btn btn-secondary" id="dismiss-error-btn">
+                        <i class="fas fa-times"></i> 关闭
+                    </button>
+                </div>
+            </div>
+        </section>
         
-        <div id="error" style="display: none; color: red;">
-            <!-- 错误信息显示区域 -->
+        <!-- 分析结果区域 -->
+        <section class="results-section" id="results-section" style="display: none;">
+            <div class="results-header">
+                <h2><i class="fas fa-chart-bar"></i> 分析结果</h2>
+                <div class="results-actions">
+                    <button class="btn btn-secondary btn-sm" id="export-btn">
+                        <i class="fas fa-download"></i> 导出报告
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="new-analysis-btn">
+                        <i class="fas fa-plus"></i> 新分析
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 文件信息概览 -->
+            <div class="file-overview" id="file-overview">
+                <!-- 动态生成 -->
+            </div>
+            
+            <!-- 统计摘要 -->
+            <div class="stats-summary" id="stats-summary">
+                <!-- 动态生成 -->
+            </div>
+            
+            <!-- 可视化图表区域 -->
+            <div class="visualizations" id="visualizations">
+                <!-- 动态生成 -->
+            </div>
+            
+            <!-- 详细统计表格 -->
+            <div class="detailed-stats" id="detailed-stats">
+                <!-- 动态生成 -->
+            </div>
+        </section>
+    </div>
+    
+    <!-- 模态框 -->
+    <div class="modal" id="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">标题</h3>
+                <button class="modal-close" id="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- 动态内容 -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel">取消</button>
+                <button class="btn btn-primary" id="modal-confirm">确认</button>
+            </div>
         </div>
     </div>
     

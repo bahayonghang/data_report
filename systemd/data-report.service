@@ -1,0 +1,41 @@
+[Unit]
+Description=Data Analysis Report Web Application
+After=network.target
+Wants=network.target
+
+[Service]
+Type=exec
+User=data-report
+Group=data-report
+WorkingDirectory=/opt/data-report
+ExecStart=/opt/data-report/.venv/bin/gunicorn main:app --bind 127.0.0.1:8000 --workers 4 --worker-class uvicorn.workers.UvicornWorker --max-requests 1000 --max-requests-jitter 100
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# 环境变量
+Environment=PORT=8000
+Environment=HOST=127.0.0.1
+Environment=LOG_LEVEL=INFO
+Environment=MAX_MEMORY_MB=2048
+Environment=MEMORY_WARNING_THRESHOLD_MB=1500
+Environment=DATA_DIRECTORY=/opt/data-report/data
+Environment=ENVIRONMENT=production
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=32768
+MemoryMax=2G
+MemoryHigh=1.5G
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/data-report/data /opt/data-report/logs
+
+[Install]
+WantedBy=multi-user.target
