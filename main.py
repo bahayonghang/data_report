@@ -135,6 +135,12 @@ async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/analysis", response_class=HTMLResponse)
+async def analysis_page(request: Request):
+    """分析结果页面"""
+    return templates.TemplateResponse("analysis.html", {"request": request})
+
+
 # 健康检查端点
 @app.get("/health")
 async def health_check():

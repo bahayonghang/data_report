@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据分析结果 - 数据分析报告工具</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/loading.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="analysis-page">
+    <!-- 全屏加载动画 -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-container">
+            <div class="loading-animation">
+                <div class="loading-spinner">
+                    <div class="spinner-ring"></div>
+                    <div class="spinner-ring"></div>
+                    <div class="spinner-ring"></div>
+                </div>
+                <div class="loading-text">
+                    <h2 id="loading-title">正在分析数据</h2>
+                    <p id="loading-subtitle">请稍候，我们正在为您生成详细的分析报告...</p>
+                    <div class="loading-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="loading-progress-fill"></div>
+                        </div>
+                        <span class="progress-text" id="loading-progress-text">0%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="loading-features">
+                <div class="feature-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>时间序列分析</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>统计分析</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>数据可视化</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-brain"></i>
+                    <span>智能洞察</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要内容区域 -->
+    <div class="analysis-container" id="analysis-container" style="display: none;">
+        <!-- 页面标题 -->
+        <header class="analysis-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><i class="fas fa-chart-line"></i> 数据分析结果</h1>
+                    <p class="subtitle" id="analysis-subtitle">分析完成时间：<span id="analysis-timestamp"></span></p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary btn-sm" id="back-btn">
+                        <i class="fas fa-arrow-left"></i> 返回首页
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="export-btn">
+                        <i class="fas fa-download"></i> 导出报告
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="new-analysis-btn">
+                        <i class="fas fa-plus"></i> 新分析
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 分析内容 -->
+        <main class="analysis-content">
+            <!-- 文件信息概览 -->
+            <section class="analysis-section fade-in-up">
+                <div class="file-overview" id="file-overview">
+                    <!-- 动态生成 -->
+                </div>
+            </section>
+
+            <!-- 统计摘要 -->
+            <section class="analysis-section fade-in-up">
+                <div class="stats-summary" id="stats-summary">
+                    <!-- 动态生成 -->
+                </div>
+            </section>
+
+            <!-- 可视化图表区域 -->
+            <section class="analysis-section fade-in-up">
+                <div class="visualizations" id="visualizations">
+                    <!-- 动态生成 -->
+                </div>
+            </section>
+
+            <!-- 详细统计表格 -->
+            <section class="analysis-section fade-in-up">
+                <div class="detailed-stats" id="detailed-stats">
+                    <!-- 动态生成 -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 错误页面 -->
+    <div class="error-page" id="error-page" style="display: none;">
+        <div class="error-container">
+            <div class="error-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h2>分析失败</h2>
+            <p id="error-message">抱歉，数据分析过程中出现了错误。</p>
+            <div class="error-actions">
+                <button class="btn btn-primary" id="retry-btn">
+                    <i class="fas fa-redo"></i> 重新分析
+                </button>
+                <button class="btn btn-secondary" id="back-to-home-btn">
+                    <i class="fas fa-home"></i> 返回首页
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/analysis.js"></script>
+</body>
+</html>

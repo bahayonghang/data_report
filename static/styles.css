@@ -493,6 +493,135 @@ h3 {
     gap: 10px;
 }
 
+/* 分析页面样式 */
+.analysis-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.analysis-header {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 20px 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+}
+
+.analysis-header .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.analysis-title {
+    margin: 0;
+    color: #2d3748;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.analysis-timestamp {
+    color: #718096;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.analysis-content {
+    padding: 40px 0;
+}
+
+.content-section {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: slideInFromRight 0.6s ease-out;
+}
+
+.content-section h3 {
+    color: #2d3748;
+    margin-bottom: 20px;
+    font-size: 1.4rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.content-section h3 i {
+    color: #667eea;
+}
+
+/* 错误页面样式 */
+.error-page {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.error-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+.error-title {
+    font-size: 2rem;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.error-message {
+    font-size: 1.1rem;
+    margin-bottom: 30px;
+    opacity: 0.9;
+    max-width: 600px;
+    line-height: 1.6;
+}
+
+/* 动画效果 */
+@keyframes slideInFromRight {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.fade-out {
+    animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     body {
@@ -555,6 +684,25 @@ h3 {
     .btn {
         width: 100%;
         justify-content: center;
+    }
+    
+    .analysis-header .container {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .header-actions {
+        justify-content: center;
+    }
+    
+    .analysis-content {
+        padding: 20px 0;
+    }
+    
+    .content-section {
+        padding: 20px;
+        margin-bottom: 20px;
     }
 }
 

@@ -54,7 +54,13 @@ function setupEventListeners() {
     elements.uploadZone?.addEventListener('dragover', handleDragOver);
     elements.uploadZone?.addEventListener('dragleave', handleDragLeave);
     elements.uploadZone?.addEventListener('drop', handleFileDrop);
-    elements.uploadZone?.addEventListener('click', () => elements.fileInput?.click());
+    // 优化点击事件：只有当点击的不是上传按钮时才触发文件选择，避免重复触发
+    elements.uploadZone?.addEventListener('click', (event) => {
+        // 检查点击目标是否为上传按钮或其子元素
+        if (!event.target.closest('#upload-btn')) {
+            elements.fileInput?.click();
+        }
+    });
     
     // 错误处理事件
     document.getElementById('retry-btn')?.addEventListener('click', retryLastOperation);
@@ -176,8 +182,17 @@ async function analyzeServerFile(filename) {
         if (data.success) {
             updateProgress(100, '分析完成!');
             setTimeout(() => {
-                currentAnalysisData = data;
-                displayAnalysisResults(data);
+                // 分析成功，将数据存储到sessionStorage并打开新页面
+                sessionStorage.setItem('analysisData', JSON.stringify(data));
+                
+                // 打开新的分析结果页面
+                const analysisWindow = window.open('/analysis', '_blank');
+                
+                // 如果无法打开新窗口，则在当前页面跳转
+                if (!analysisWindow) {
+                    window.location.href = '/analysis';
+                }
+                
                 hideProgress();
             }, 500);
         } else {
@@ -218,8 +233,17 @@ async function uploadAndAnalyze(file) {
         if (data.success) {
             updateProgress(100, '分析完成!');
             setTimeout(() => {
-                currentAnalysisData = data;
-                displayAnalysisResults(data);
+                // 分析成功，将数据存储到sessionStorage并打开新页面
+                sessionStorage.setItem('analysisData', JSON.stringify(data));
+                
+                // 打开新的分析结果页面
+                const analysisWindow = window.open('/analysis', '_blank');
+                
+                // 如果无法打开新窗口，则在当前页面跳转
+                if (!analysisWindow) {
+                    window.location.href = '/analysis';
+                }
+                
                 hideProgress();
             }, 500);
         } else {
