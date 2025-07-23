@@ -1,0 +1,104 @@
+site_name: 数据分析报告系统文档
+site_description: Web-based automated data analysis and reporting tool for time-series data
+site_author: Data Report Team
+site_url: https://your-domain.com
+
+repo_name: data_report
+repo_url: https://github.com/your-username/data_report
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.mark
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.tilde
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search:
+      lang: zh
+  - mermaid2:
+      version: "10.4.0"
+      arguments:
+        theme: |
+          ^(JSON.parse(__md_get("__palette").index == 1)) ?
+          "dark" : "light"
+  - include-markdown
+
+nav:
+  - 首页: index.md
+  - 架构设计:
+    - 概览: architecture/overview.md
+    - 技术栈: architecture/tech-stack.md
+    - 数据流: architecture/data-flow.md
+  - API文档:
+    - 概览: api/endpoints.md
+    - 文件管理: api/file-management.md
+    - 数据分析: api/analysis.md
+    - 报告生成: api/reports.md
+  - 用户指南:
+    - 快速开始: user-guide/quick-start.md
+    - 用户界面: user-guide/interface.md
+    - 结果解读: user-guide/result-interpretation.md
+  - 开发指南:
+    - 环境搭建: development/setup.md
+    - 开发环境: development/environment.md
+    - 测试指南: development/testing.md
+  - 部署运维:
+    - Docker部署: deployment/docker.md
+    - 部署指南: deployment/deployment.md
+    - 故障排除: deployment/troubleshooting.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-username/data_report
+  version:
+    provider: mike
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js

@@ -24,8 +24,22 @@ dev = [
     "pytest-playwright>=0.4.0",
     "playwright>=1.40.0"
 ]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocs-mermaid2-plugin>=1.1.0",
+    "mkdocs-include-markdown-plugin>=6.0.0"
+]
+
+[dependency-groups]
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocs-mermaid2-plugin>=1.1.0",
+    "mkdocs-include-markdown-plugin>=6.0.0"
+]
 
 [tool.uv]
 default-groups = "all"
 # index-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"  # 清华源
-index-url = "https://mirrors.aliyun.com/pypi/simple" 
+index-url = "https://mirrors.aliyun.com/pypi/simple"
