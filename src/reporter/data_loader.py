@@ -39,7 +39,7 @@ def load_data_file(file_path: str, max_rows: int = 1000000) -> pl.DataFrame:
     file_size = file_path.stat().st_size
     
     # 大文件警告
-    if file_size > 100 * 1024 * 1024:  # 100MB
+    if file_size > 1024 * 1024 * 1024:  # 1GB
         logging.warning(f"处理大文件: {file_size / 1024 / 1024:.1f}MB")
 
     suffix = file_path.suffix.lower()
@@ -60,7 +60,7 @@ def load_data_file(file_path: str, max_rows: int = 1000000) -> pl.DataFrame:
                 file_path,
                 use_pyarrow=True,
                 memory_map=True,
-                n_rows=max_rows if file_size > 100 * 1024 * 1024 else None  # 100MB以上限制行数
+                n_rows=max_rows if file_size > 1024 * 1024 * 1024 else None  # 1GB以上限制行数
             )
         else:
             raise ValueError(f"不支持的文件格式: {suffix}")

@@ -63,10 +63,10 @@ sequenceDiagram
 
 | 格式 | 扩展名 | 描述 | 最大大小 |
 |------|--------|------|----------|
-| CSV | .csv | 逗号分隔值文件 | 100MB |
+| CSV | .csv | 逗号分隔值文件 | 1GB |
 | Parquet | .parquet | 列式存储格式 | 500MB |
 | Excel | .xlsx, .xls | Excel工作簿 | 50MB |
-| JSON | .json | JSON数据文件 | 100MB |
+| JSON | .json | JSON数据文件 | 1GB |
 
 ### 文件验证规则
 

@@ -44,7 +44,7 @@ UPLOAD_DIRECTORY=./uploads
 #### 安全配置
 ```bash
 # 最大文件大小（字节）
-MAX_FILE_SIZE=104857600  # 100MB
+MAX_FILE_SIZE=1073741824  # 1GB
 
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS=.csv,.parquet
@@ -182,7 +182,7 @@ MEMORY_CONFIG = {
 ```python
 # 在 src/reporter/security.py 中配置
 SECURITY_CONFIG = {
-    "max_file_size": 100 * 1024 * 1024,  # 100MB
+    "max_file_size": 1024 * 1024 * 1024,  # 1GB
     "allowed_extensions": [".csv", ".parquet"],
     "blocked_paths": ["..", "~", "/etc", "/var"],
     "enable_virus_scan": False,  # 需要额外配置
@@ -333,7 +333,7 @@ LOGGING_CONFIG = {
             "level": "INFO",
             "formatter": "detailed",
             "filename": "logs/app.log",
-            "maxBytes": 100 * 1024 * 1024,  # 100MB
+            "maxBytes": 1073741824,  # 1GB
             "backupCount": 5
         }
     },

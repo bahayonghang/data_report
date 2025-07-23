@@ -60,7 +60,7 @@ POST /api/upload
 
 - **Content-Type**: `multipart/form-data`
 - **文件字段**: `file`
-- **最大文件大小**: 100MB
+- **最大文件大小**: 1GB
 - **支持格式**: CSV, Parquet
 
 #### 响应示例

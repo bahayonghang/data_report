@@ -160,13 +160,8 @@ class TestErrorHandling:
 
     def test_large_file_upload(self, api_client):
         """测试大文件上传"""
-        # 创建超过大小限制的文件内容
-        large_content = "DateTime,value\n" + "\n".join([
-            f"2024-01-01,{i}" for i in range(100000)
-        ])
-        
-        # 模拟超大文件
-        oversized_content = large_content * 100  # 约100MB
+        # 生成一个约1GB的测试文件
+        oversized_content = 'x' * (1024 * 1024 * 1024)  # 1GB
         
         response = api_client.post(
             "/api/upload-and-analyze",

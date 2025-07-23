@@ -54,7 +54,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 1. **拖拽上传**
    - 将CSV或Parquet文件直接拖拽到上传区域
    - 支持的文件格式：`.csv`, `.parquet`
-   - 最大文件大小：100MB
+   - 最大文件大小：1GB
 
 2. **点击上传**
    - 点击"选择文件"按钮
@@ -202,7 +202,7 @@ DateTime,Value1,Value2,Category
 ### Q: 上传文件失败
 **A**: 检查以下几点：
 - 文件格式是否为CSV或Parquet
-- 文件大小是否超过100MB
+- 文件大小是否超过1GB
 - 文件是否损坏或格式错误
 
 ### Q: 分析结果不准确

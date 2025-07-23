@@ -247,7 +247,7 @@ metadata:
 data:
   ENVIRONMENT: "production"
   LOG_LEVEL: "info"
-  MAX_FILE_SIZE: "100MB"
+  MAX_FILE_SIZE: "1GB"
   ALLOWED_EXTENSIONS: "csv,parquet"
 ```
 
@@ -498,7 +498,7 @@ CORS_ORIGINS=https://data-report.example.com
 # 文件配置
 DATA_DIR=/app/data
 UPLOAD_DIR=/app/uploads
-MAX_FILE_SIZE=100MB
+MAX_FILE_SIZE=1GB
 ALLOWED_EXTENSIONS=csv,parquet
 
 # 数据库配置（如果使用）
