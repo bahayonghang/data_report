@@ -2,7 +2,7 @@
 # 用于计算相关系数矩阵、描述性统计和缺失值分析
 
 import polars as pl
-from typing import Dict, Any
+from typing import Dict
 
 
 def calculate_correlation_matrix(df: pl.DataFrame) -> pl.DataFrame:
