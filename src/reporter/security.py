@@ -15,8 +15,8 @@ from pathlib import Path
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS = {".csv", ".parquet"}
 
-# 默认文件大小限制 (100MB)
-MAX_FILE_SIZE = 100 * 1024 * 1024
+# 默认文件大小限制 (1GB)
+MAX_FILE_SIZE = 1024 * 1024 * 1024
 
 
 def validate_path(file_path: str, base_directory: str) -> bool:

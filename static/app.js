@@ -126,10 +126,10 @@ function validateAndUploadFile(file) {
         return;
     }
     
-    // 验证文件大小 (100MB)
-    const maxSize = 100 * 1024 * 1024;
+    // 验证文件大小 (1GB)
+    const maxSize = 1024 * 1024 * 1024;
     if (file.size > maxSize) {
-        showError('文件过大', `文件大小不能超过 100MB。当前文件大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+        showError('文件过大', `文件大小不能超过 1GB。当前文件大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
         return;
     }
     

@@ -5,6 +5,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
 
+<div align="center">
+  <img src="image/README/网页截图.png" width="600" alt="网页截图">
+</div>
 一个基于Web的自动化数据分析和报告工具，专门为时间序列数据设计。提供直观的Web界面，支持多种数据格式，自动生成统计分析报告和可视化图表。
 
 ## 🚀 主要特性
@@ -20,12 +23,14 @@
 ## 📊 分析功能
 
 ### 统计分析
+
 - 描述性统计（均值、中位数、标准差等）
 - 缺失值分析和处理建议
 - 相关系数矩阵计算
 - 时间序列平稳性检验（ADF检验）
 
 ### 可视化图表
+
 - 时序曲线图（支持多变量）
 - 相关性热力图
 - 数据分布直方图
@@ -48,68 +53,69 @@
 ### 方式一：使用 uv（推荐）
 
 1. **安装 uv**
+
    ```bash
    # Windows
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   
+
    # macOS/Linux
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
-
 2. **克隆项目**
+
    ```bash
    git clone https://github.com/your-username/data_report.git
    cd data_report
    ```
-
 3. **安装依赖**
+
    ```bash
    uv sync
    ```
-
 4. **启动服务**
+
    ```bash
    uv run uvicorn main:app --reload
    ```
-
 5. **访问应用**
    打开浏览器访问 `http://localhost:8000`
 
 ### 方式二：使用 Docker
 
 1. **克隆项目**
+
    ```bash
    git clone https://github.com/your-username/data_report.git
    cd data_report
    ```
-
 2. **构建并启动**
+
    ```bash
    docker-compose up --build
    ```
-
 3. **访问应用**
    打开浏览器访问 `http://localhost:8080`
 
 ### 方式三：传统 pip 安装
 
 1. **创建虚拟环境**
+
    ```bash
    python -m venv venv
-   
+
    # Windows
    venv\Scripts\activate
-   
+
    # macOS/Linux
    source venv/bin/activate
    ```
-
 2. **安装依赖**
+
    ```bash
    pip install -e .
    ```
-
 3. **启动服务**
+
    ```bash
    uvicorn main:app --reload
    ```
@@ -119,26 +125,27 @@
 ### 基本使用流程
 
 1. **上传数据文件**
+
    - 支持CSV和Parquet格式
    - 文件大小限制：100MB
    - 自动检测时间列
-
 2. **选择分析类型**
+
    - 基础统计分析
    - 时间序列分析
    - 相关性分析
-
 3. **配置分析参数**
+
    - 选择目标列
    - 设置时间范围
    - 调整图表样式
-
 4. **查看分析结果**
+
    - 统计摘要表格
    - 交互式图表
    - 分析结论和建议
-
 5. **导出报告**
+
    - HTML格式报告
    - 图表PNG/SVG导出
    - 数据CSV导出
@@ -152,22 +159,23 @@
 ### 开发环境搭建
 
 1. **安装开发依赖**
+
    ```bash
    uv sync --group dev
    ```
-
 2. **运行测试**
+
    ```bash
    uv run pytest
    ```
-
 3. **代码格式化**
+
    ```bash
    uv run ruff format .
    uv run ruff check .
    ```
-
 4. **启动文档服务**
+
    ```bash
    uv sync --group docs
    uv run mkdocs serve
@@ -199,6 +207,7 @@ data_report/
 - **本地文档**: 运行 `uv run mkdocs serve` 后访问 `http://localhost:8000`
 
 主要文档包括：
+
 - [安装指南](docs/getting-started/installation.md)
 - [API文档](docs/api/overview.md)
 - [开发指南](docs/development/environment.md)
@@ -209,6 +218,7 @@ data_report/
 我们欢迎任何形式的贡献！请查看[贡献指南](docs/development/contributing.md)了解如何参与项目开发。
 
 ### 贡献方式
+
 - 🐛 报告Bug
 - 💡 提出新功能建议
 - 📝 改进文档

@@ -436,7 +436,7 @@ async def upload_and_analyze(file: UploadFile = File(...)):
         content = await file.read()
         file_size = len(content)
 
-        MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
+        MAX_UPLOAD_SIZE = 1024 * 1024 * 1024  # 1GB
         if file_size > MAX_UPLOAD_SIZE:
             raise HTTPException(
                 status_code=413,
