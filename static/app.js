@@ -4,13 +4,16 @@
 // 全局状态管理
 let currentAnalysisData = null;
 let isAnalyzing = false;
+let currentView = 'upload'; // 'upload', 'history', 'search'
+let fileHistory = [];
+let searchResults = [];
 
 // DOM 元素引用
 const elements = {
     uploadZone: null,
     fileInput: null,
     uploadBtn: null,
-    serverFileList: null,
+    // 服务器文件列表已删除
     statusSection: null,
     errorSection: null,
     resultsSection: null,
@@ -25,7 +28,7 @@ const elements = {
 document.addEventListener('DOMContentLoaded', function() {
     initializeElements();
     setupEventListeners();
-    loadServerFiles();
+    // 服务器文件加载已删除
 });
 
 // 初始化DOM元素引用
@@ -33,7 +36,25 @@ function initializeElements() {
     elements.uploadZone = document.getElementById('upload-zone');
     elements.fileInput = document.getElementById('file-input');
     elements.uploadBtn = document.getElementById('upload-btn');
-    elements.serverFileList = document.getElementById('server-file-list');
+    // 服务器文件列表元素已删除
+    
+    // 导航相关元素通过class选择器获取，不需要单独的ID引用
+    
+    // 视图容器
+    elements.uploadView = document.getElementById('upload-view');
+    elements.historyView = document.getElementById('history-view');
+    elements.searchView = document.getElementById('search-view');
+    
+    // 历史记录相关
+    elements.historyList = document.getElementById('history-list');
+    elements.historyFilter = document.getElementById('history-filter');
+    elements.loadMoreBtn = document.getElementById('load-more-btn');
+    
+    // 搜索相关
+    elements.searchInput = document.getElementById('search-input');
+    elements.searchBtn = document.getElementById('search-btn');
+    elements.searchResults = document.getElementById('search-results');
+    
     elements.statusSection = document.getElementById('status-section');
     elements.errorSection = document.getElementById('error-section');
     elements.resultsSection = document.getElementById('results-section');
@@ -59,6 +80,26 @@ function setupEventListeners() {
         // 检查点击目标是否为上传按钮或其子元素
         if (!event.target.closest('#upload-btn')) {
             elements.fileInput?.click();
+        }
+    });
+    
+    // 导航切换事件 - 使用正确的选择器
+    document.querySelectorAll('.nav-item').forEach(navItem => {
+        navItem.addEventListener('click', () => {
+            const view = navItem.getAttribute('data-view');
+            switchView(view);
+        });
+    });
+    
+    // 历史记录相关事件
+    elements.historyFilter?.addEventListener('change', () => loadFileHistory(true));
+    elements.loadMoreBtn?.addEventListener('click', loadMoreHistory);
+    
+    // 搜索相关事件
+    elements.searchBtn?.addEventListener('click', performSearch);
+    elements.searchInput?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            performSearch();
         }
     });
     
@@ -139,73 +180,9 @@ function validateAndUploadFile(file) {
 
 // ====== API 调用函数 ======
 
-// 获取服务器文件列表
-async function listServerFiles() {
-    try {
-        const response = await fetch('/api/list-files');
-        const data = await response.json();
-        
-        if (data.success) {
-            displayServerFiles(data.files);
-        } else {
-            throw new Error(data.error?.message || '获取文件列表失败');
-        }
-    } catch (error) {
-        console.error('Error loading server files:', error);
-        displayServerFilesError(error.message);
-    }
-}
+// 服务器文件列表功能已删除
 
-// 分析服务器文件
-async function analyzeServerFile(filename) {
-    if (isAnalyzing) return;
-    
-    try {
-        showProgress('正在分析服务器文件...', '正在加载文件: ' + filename);
-        isAnalyzing = true;
-        
-        // 模拟进度更新
-        updateProgress(20, '正在读取文件...');
-        
-        const formData = new FormData();
-        formData.append('filename', filename);
-        
-        const response = await fetch('/api/analyze-server-file', {
-            method: 'POST',
-            body: formData
-        });
-        
-        updateProgress(80, '正在生成分析结果...');
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            updateProgress(100, '分析完成!');
-            setTimeout(() => {
-                // 分析成功，将数据存储到sessionStorage并打开新页面
-                sessionStorage.setItem('analysisData', JSON.stringify(data));
-                
-                // 打开新的分析结果页面
-                const analysisWindow = window.open('/analysis', '_blank');
-                
-                // 如果无法打开新窗口，则在当前页面跳转
-                if (!analysisWindow) {
-                    window.location.href = '/analysis';
-                }
-                
-                hideProgress();
-            }, 500);
-        } else {
-            throw new Error(data.error?.message || '分析失败');
-        }
-    } catch (error) {
-        console.error('Error analyzing server file:', error);
-        hideProgress();
-        showError('服务器文件分析失败', error.message);
-    } finally {
-        isAnalyzing = false;
-    }
-}
+// 服务器文件分析功能已删除
 
 // 上传并分析文件
 async function uploadAndAnalyze(file) {
@@ -264,64 +241,11 @@ async function uploadAndAnalyze(file) {
 
 // ====== UI 更新函数 ======
 
-// 显示服务器文件列表
-function displayServerFiles(files) {
-    if (!elements.serverFileList) return;
-    
-    if (files.length === 0) {
-        elements.serverFileList.innerHTML = `
-            <div class="loading-files">
-                <i class="fas fa-folder-open"></i>
-                <p>暂无可用的数据文件</p>
-            </div>
-        `;
-        return;
-    }
-    
-    const fileItems = files.map(file => {
-        const fileSize = formatFileSize(file.size);
-        const modifiedDate = formatDate(file.modified);
-        const fileIcon = getFileIcon(file.name);
-        
-        return `
-            <div class="file-item" onclick="selectServerFile('${file.name}')">
-                <div class="file-info">
-                    <i class="file-icon ${fileIcon}"></i>
-                    <div class="file-details">
-                        <h4>${file.name}</h4>
-                        <div class="file-meta">${fileSize} • 修改于 ${modifiedDate}</div>
-                    </div>
-                </div>
-                <button class="btn btn-primary btn-sm">
-                    <i class="fas fa-play"></i> 分析
-                </button>
-            </div>
-        `;
-    }).join('');
-    
-    elements.serverFileList.innerHTML = fileItems;
-}
+// 服务器文件显示功能已删除
 
-// 显示服务器文件错误
-function displayServerFilesError(errorMessage) {
-    if (!elements.serverFileList) return;
-    
-    elements.serverFileList.innerHTML = `
-        <div class="loading-files">
-            <i class="fas fa-exclamation-triangle" style="color: #e53e3e;"></i>
-            <p>加载文件列表失败</p>
-            <p style="font-size: 0.9rem; color: #6c757d; margin-top: 10px;">${errorMessage}</p>
-            <button class="btn btn-secondary btn-sm" onclick="loadServerFiles()" style="margin-top: 15px;">
-                <i class="fas fa-redo"></i> 重试
-            </button>
-        </div>
-    `;
-}
+// 服务器文件错误显示功能已删除
 
-// 选择服务器文件
-function selectServerFile(filename) {
-    analyzeServerFile(filename);
-}
+// 服务器文件选择功能已删除
 
 // 显示进度
 function showProgress(title, text) {
@@ -507,7 +431,7 @@ function getFileIcon(filename) {
 // 重试上次操作
 function retryLastOperation() {
     hideError();
-    loadServerFiles();
+    // 服务器文件加载已删除
 }
 
 // 开始新分析
@@ -571,10 +495,354 @@ function hideModal() {
     }
 }
 
-// 加载服务器文件
-function loadServerFiles() {
-    listServerFiles();
+// ====== 核心功能函数 ======
+
+// 视图切换函数
+function switchView(view) {
+    currentView = view;
+    
+    // 更新导航状态 - 移除所有active类
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // 为当前视图的导航按钮添加active类
+    const activeNavItem = document.querySelector(`[data-view="${view}"]`);
+    if (activeNavItem) {
+        activeNavItem.classList.add('active');
+    }
+    
+    // 隐藏所有视图
+    elements.uploadView?.style.setProperty('display', 'none');
+    elements.historyView?.style.setProperty('display', 'none');
+    elements.searchView?.style.setProperty('display', 'none');
+    
+    // 显示对应视图
+    switch(view) {
+        case 'upload':
+            elements.uploadView?.style.setProperty('display', 'block');
+            break;
+        case 'history':
+            elements.historyView?.style.setProperty('display', 'block');
+            // 加载历史记录数据
+            loadFileHistory();
+            break;
+        case 'search':
+            elements.searchView?.style.setProperty('display', 'block');
+            break;
+    }
 }
+
+// 历史记录管理
+let historyOffset = 0;
+const historyLimit = 20;
+
+// 加载文件历史记录
+async function loadFileHistory(reset = false) {
+    if (reset) {
+        historyOffset = 0;
+        if (elements.historyList) {
+            elements.historyList.innerHTML = '';
+        }
+    }
+    
+    try {
+        // 显示加载状态
+        showHistoryLoading();
+        
+        const response = await fetch(`/api/files/history?offset=${historyOffset}&limit=${historyLimit}`);
+        const data = await response.json();
+        
+        if (data.success && data.data && data.data.files && Array.isArray(data.data.files)) {
+            renderHistoryList(data.data.files, reset);
+            historyOffset += data.data.files.length;
+            
+            // 更新加载更多按钮状态
+            if (elements.loadMoreBtn) {
+                elements.loadMoreBtn.style.display = data.data.has_more ? 'block' : 'none';
+            }
+        } else {
+            // 如果没有 files 数组或数据格式不正确，显示空状态
+            if (reset && elements.historyList) {
+                elements.historyList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-history"></i>
+                        <p>暂无历史记录</p>
+                        <p class="history-tip">上传并分析文件后，记录将显示在这里</p>
+                    </div>
+                `;
+            }
+            if (elements.loadMoreBtn) {
+                elements.loadMoreBtn.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading file history:', error);
+        showHistoryError(error.message);
+    }
+}
+
+// 显示历史记录加载状态
+function showHistoryLoading() {
+    if (elements.historyList) {
+        elements.historyList.innerHTML = `
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>正在加载历史记录...</p>
+            </div>
+        `;
+    }
+}
+
+// 显示历史记录错误
+function showHistoryError(message) {
+    if (elements.historyList) {
+        elements.historyList.innerHTML = `
+            <div class="error-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>加载失败: ${message}</p>
+                <button class="btn btn-primary" onclick="loadFileHistory(true)">
+                    <i class="fas fa-redo"></i> 重试
+                </button>
+            </div>
+        `;
+    }
+}
+
+// 渲染历史记录列表
+function renderHistoryList(files, reset = false) {
+    if (!elements.historyList) return;
+    
+    if (reset) {
+        elements.historyList.innerHTML = '';
+    }
+    
+    if (files.length === 0 && reset) {
+        elements.historyList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-history"></i>
+                <p>暂无历史记录</p>
+                <p class="history-tip">上传并分析文件后，记录将显示在这里</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const historyItems = files.map(file => {
+        const date = formatDate(file.created_at);
+        const fileSize = formatFileSize(file.file_size);
+        
+        return `
+            <div class="history-item" data-id="${file.id}">
+                <div class="history-header">
+                    <h4>${file.filename}</h4>
+                    <span class="history-date">${date}</span>
+                </div>
+                <div class="history-content">
+                    <div class="history-meta">
+                        <span><i class="fas fa-database"></i> ${fileSize}</span>
+                        <span><i class="fas fa-table"></i> ${file.rows?.toLocaleString()} 行</span>
+                        <span><i class="fas fa-columns"></i> ${file.columns?.toLocaleString()} 列</span>
+                    </div>
+                    <div class="history-summary">
+                        <p>${file.summary || '数据分析完成'}</p>
+                    </div>
+                </div>
+                <div class="history-actions">
+                    <button class="btn btn-primary btn-sm" onclick="viewHistoryResult('${file.id}')">
+                        <i class="fas fa-eye"></i> 查看结果
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteHistoryItem('${file.id}')">
+                        <i class="fas fa-trash"></i> 删除
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    elements.historyList.insertAdjacentHTML('beforeend', historyItems);
+}
+
+// 加载更多历史记录
+async function loadMoreHistory() {
+    await loadFileHistory(false);
+}
+
+// 查看历史记录结果
+async function viewHistoryResult(historyId) {
+    try {
+        const response = await fetch(`/api/history/${historyId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // 将历史数据存储到sessionStorage并打开分析页面
+            sessionStorage.setItem('analysisData', JSON.stringify(data));
+            
+            const analysisWindow = window.open('/analysis', '_blank');
+            if (!analysisWindow) {
+                window.location.href = '/analysis';
+            }
+        } else {
+            throw new Error(data.error?.message || '获取历史记录失败');
+        }
+    } catch (error) {
+        console.error('Error viewing history result:', error);
+        showError('查看失败', error.message);
+    }
+}
+
+// 查看分析结果
+async function viewAnalysisResult(analysisId) {
+    try {
+        const response = await fetch(`/api/analysis/${analysisId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // 将分析数据存储到sessionStorage并打开分析页面
+            sessionStorage.setItem('analysisData', JSON.stringify(data));
+            
+            const analysisWindow = window.open('/analysis', '_blank');
+            if (!analysisWindow) {
+                window.location.href = '/analysis';
+            }
+        } else {
+            throw new Error(data.message || '获取分析结果失败');
+        }
+    } catch (error) {
+        console.error('Error viewing analysis result:', error);
+        showMessage('查看分析结果失败: ' + error.message, 'error');
+    }
+}
+
+// 服务器文件分析功能已删除
+
+// 删除历史记录项
+async function deleteHistoryItem(historyId) {
+    showModal(
+        '确认删除',
+        '确定要删除这条分析记录吗？此操作不可撤销。',
+        async () => {
+            try {
+                const response = await fetch(`/api/history/${historyId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 从DOM中移除该项
+                    const historyItem = document.querySelector(`[data-id="${historyId}"]`);
+                    if (historyItem) {
+                        historyItem.remove();
+                    }
+                    
+                    // 如果列表为空，重新加载
+                    if (elements.historyList.children.length === 0) {
+                        loadFileHistory(true);
+                    }
+                } else {
+                    throw new Error(data.error?.message || '删除失败');
+                }
+            } catch (error) {
+                console.error('Error deleting history item:', error);
+                showError('删除失败', error.message);
+            }
+        }
+    );
+}
+
+// 搜索功能
+async function performSearch() {
+    const query = elements.searchInput?.value?.trim();
+    if (!query) {
+        showError('搜索错误', '请输入搜索关键词');
+        return;
+    }
+    
+    try {
+        elements.searchBtn.disabled = true;
+        elements.searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 搜索中...';
+        
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ query })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            displaySearchResults(data.results);
+        } else {
+            throw new Error(data.error?.message || '搜索失败');
+        }
+    } catch (error) {
+        console.error('Error performing search:', error);
+        showError('搜索失败', error.message);
+    } finally {
+        elements.searchBtn.disabled = false;
+        elements.searchBtn.innerHTML = '<i class="fas fa-search"></i> 搜索';
+    }
+}
+
+// 显示搜索结果
+function displaySearchResults(results) {
+    if (!elements.searchResults) return;
+    
+    if (results.length === 0) {
+        elements.searchResults.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-search"></i>
+                <p>未找到相关结果</p>
+                <p class="search-tip">尝试使用不同的关键词或检查拼写</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const resultItems = results.map(result => {
+        const date = formatDate(result.created_at);
+        const relevance = Math.round(result.relevance * 100);
+        
+        return `
+            <div class="search-result-item" data-id="${result.id}">
+                <div class="result-header">
+                    <h4>${result.filename}</h4>
+                    <span class="relevance-score">${relevance}% 匹配</span>
+                </div>
+                <div class="result-content">
+                    <p class="result-snippet">${result.snippet}</p>
+                    <div class="result-meta">
+                        <span><i class="fas fa-clock"></i> ${date}</span>
+                        <span><i class="fas fa-database"></i> ${formatFileSize(result.file_size)}</span>
+                        <span><i class="fas fa-table"></i> ${result.rows?.toLocaleString()} 行</span>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <button class="btn btn-primary btn-sm" onclick="viewSearchResult('${result.id}')">
+                        <i class="fas fa-eye"></i> 查看详情
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="analyzeSearchResult('${result.filename}')">
+                        <i class="fas fa-play"></i> 重新分析
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    elements.searchResults.innerHTML = resultItems;
+}
+
+// 查看搜索结果
+async function viewSearchResult(resultId) {
+    // 与查看历史记录结果相同的逻辑
+    await viewHistoryResult(resultId);
+}
+
+// 搜索结果文件分析功能已删除
+
+// 服务器文件加载功能已删除
 
 // ====== 任务7.3: 动态结果渲染 ======
 

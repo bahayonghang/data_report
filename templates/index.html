@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>数据分析报告工具</title>
     <link rel="stylesheet" href="/static/styles.css">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -16,9 +16,25 @@
             <p class="subtitle">上传或选择时序数据文件，获得自动化分析报告</p>
         </header>
         
-        <!-- 文件选择区域 -->
-        <section class="file-section">
-            <h2><i class="fas fa-file-upload"></i> 选择数据文件</h2>
+        <!-- 导航栏 -->
+        <nav class="navigation">
+            <div class="nav-items">
+                <button class="nav-item active" data-view="upload">
+                    <i class="fas fa-upload"></i> 文件上传
+                </button>
+                <button class="nav-item" data-view="history">
+                    <i class="fas fa-history"></i> 历史记录
+                </button>
+                <button class="nav-item" data-view="search">
+                    <i class="fas fa-search"></i> 文件搜索
+                </button>
+            </div>
+        </nav>
+        
+        <!-- 上传视图 -->
+        <section class="view-container" id="upload-view">
+            <div class="file-section">
+                <h2><i class="fas fa-file-upload"></i> 选择数据文件</h2>
             
             <!-- 文件上传区域 -->
             <div class="upload-area">
@@ -32,21 +48,72 @@
                         <button class="btn btn-primary" id="upload-btn">
                             <i class="fas fa-plus"></i> 选择文件
                         </button>
-                    </div>
                 </div>
             </div>
             
-            <!-- 分隔线 -->
-            <div class="divider">
-                <span>或</span>
+            <!-- 服务器文件选择功能已删除 -->
+        </section>
+        
+        <!-- 历史记录视图 -->
+        <section class="view-container" id="history-view" style="display: none;">
+            <div class="history-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-history"></i> 分析历史记录</h2>
+                    <div class="history-controls">
+                        <select id="history-filter" class="form-select">
+                            <option value="all">全部文件</option>
+                            <option value="csv">CSV 文件</option>
+                            <option value="parquet">Parquet 文件</option>
+                            <option value="completed">已完成</option>
+                            <option value="failed">失败</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" id="refresh-history">
+                            <i class="fas fa-refresh"></i> 刷新
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="history-list" id="history-list">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>正在加载历史记录...</p>
+                    </div>
+                </div>
+                
+                <button class="btn btn-secondary" id="load-more-history" style="display: none;">
+                    <i class="fas fa-plus"></i> 加载更多
+                </button>
             </div>
-            
-            <!-- 服务器文件选择区域 -->
-            <div class="server-files">
-                <h3>选择服务器文件</h3>
-                <div class="server-file-list" id="server-file-list">
-                    <div class="loading-files">
-                        <i class="fas fa-spinner fa-spin"></i> 正在加载文件列表...
+        </section>
+        
+        <!-- 搜索视图 -->
+        <section class="view-container" id="search-view" style="display: none;">
+            <div class="search-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-search"></i> 文件搜索</h2>
+                </div>
+                
+                <form class="search-form" id="search-form">
+                    <div class="search-input-group">
+                        <input type="text" id="search-input" class="form-input" placeholder="输入文件名、内容关键词或标签...">
+                        <button type="submit" class="btn btn-primary" id="search-btn">
+                            <i class="fas fa-search"></i> 搜索
+                        </button>
+                    </div>
+                    <div class="search-tips">
+                        <p><i class="fas fa-info-circle"></i> 搜索提示：</p>
+                        <ul>
+                            <li>支持文件名模糊匹配</li>
+                            <li>支持文件内容关键词搜索</li>
+                            <li>支持按文件类型过滤</li>
+                        </ul>
+                    </div>
+                </form>
+                
+                <div class="search-results" id="search-results">
+                    <div class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <p>输入关键词开始搜索</p>
                     </div>
                 </div>
             </div>

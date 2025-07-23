@@ -1,0 +1,119 @@
+{
+  "success": true,
+  "data": {
+    "file_info": {
+      "name": "sample_data.csv",
+      "rows": 3,
+      "columns": 3
+    },
+    "time_info": {
+      "time_column": "DateTime",
+      "time_range": {
+        "start": "2024-01-01 00:00:00",
+        "end": "2024-01-01 02:00:00",
+        "duration_days": 0,
+        "total_points": 3,
+        "frequency": "0.0 days",
+        "gaps": []
+      }
+    },
+    "statistics": {
+      "value1": {
+        "count": 3,
+        "mean": 10.5,
+        "median": 10.5,
+        "std": 0.6999999999999993,
+        "min": 9.8,
+        "max": 11.2,
+        "q1": 10.15,
+        "q3": 10.85,
+        "skewness": 0.0,
+        "kurtosis": -1.5000000000000002
+      },
+      "value2": {
+        "count": 3,
+        "mean": 20.400000000000002,
+        "median": 20.3,
+        "std": 0.6557438524302004,
+        "min": 19.8,
+        "max": 21.1,
+        "q1": 20.05,
+        "q3": 20.700000000000003,
+        "skewness": 0.2736424660533112,
+        "kurtosis": -1.5000000000000027
+      }
+    },
+    "missing_values": {
+      "DateTime": {
+        "total_count": 3,
+        "null_count": 0,
+        "non_null_count": 3,
+        "null_percentage": 0.0
+      },
+      "value1": {
+        "total_count": 3,
+        "null_count": 0,
+        "non_null_count": 3,
+        "null_percentage": 0.0
+      },
+      "value2": {
+        "total_count": 3,
+        "null_count": 0,
+        "non_null_count": 3,
+        "null_percentage": 0.0
+      }
+    },
+    "correlation_matrix": {
+      "matrix": {
+        "value1": {
+          "value1": 1.0,
+          "value2": -0.9912407071619304
+        },
+        "value2": {
+          "value1": -0.9912407071619304,
+          "value2": 1.0
+        }
+      },
+      "columns": [
+        "value1",
+        "value2"
+      ],
+      "shape": [
+        2,
+        2
+      ],
+      "sample_size": 3
+    },
+    "stationarity_tests": {
+      "value1": {
+        "adf_statistic": null,
+        "p_value": null,
+        "critical_values": {},
+        "is_stationary": null,
+        "interpretation": "数据不足，无法进行ADF检验"
+      },
+      "value2": {
+        "adf_statistic": null,
+        "p_value": null,
+        "critical_values": {},
+        "is_stationary": null,
+        "interpretation": "数据不足，无法进行ADF检验"
+      }
+    },
+    "visualizations": {
+      "time_series": {
+        "data": [
+          {
+            "hovertemplate": "<b>value1</b><br>时间: %{x}<br>数值: %{y:.2f}<extra></extra>",
+            "line": {
+              "color": "#2E86AB",
+              "width": 2.5
+            },
+            "marker": {
+              "color": "#2E86AB",
+              "size": 4
+            },
+            "mode": "lines+markers",
+            "name": "value1",
+            "x": [
+              

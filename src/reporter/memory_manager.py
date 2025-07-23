@@ -164,13 +164,11 @@ class MemoryLimiter:
     @contextmanager
     def memory_limit(self, operation: str):
         """内存限制上下文管理器"""
-        start_memory = self.memory_manager.get_memory_usage()
-        
         try:
             self.memory_manager.log_memory_usage(f"{operation}_start")
             yield
-            
-        except Exception as e:
+
+        except Exception:
             self.memory_manager.log_memory_usage(f"{operation}_error")
             raise
         
@@ -231,7 +229,7 @@ def monitor_memory_usage(func):
             try:
                 result = func(*args, **kwargs)
                 return result
-            except Exception as e:
+            except Exception:
                 memory_manager.log_memory_usage(f"{operation_name}_exception")
                 raise
     

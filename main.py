@@ -3,7 +3,7 @@
 
 import os
 from pathlib import Path
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +35,8 @@ from src.reporter.visualization.charts import (
     create_distribution_plots,
     create_box_plots,
 )
+from src.reporter.database import DatabaseManager, calculate_file_hash
+from src.reporter.file_manager import file_storage_manager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +69,20 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # 环境配置
 DATA_DIRECTORY = os.getenv("DATA_DIRECTORY", "./data")
 Path(DATA_DIRECTORY).mkdir(parents=True, exist_ok=True)
+
+# 数据库管理器实例
+db_manager = DatabaseManager()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时初始化数据库"""
+    try:
+        await db_manager.init_database()
+        logger.info("数据库初始化完成")
+    except Exception as e:
+        logger.error(f"数据库初始化失败: {e}")
+        raise
 
 
 # 异常处理器
@@ -152,78 +168,10 @@ async def health_check():
     }
 
 
-# 文件管理 API 端点
-@app.get("/api/list-files")
-async def list_server_files():
-    """
-    列出服务器数据目录中的可用文件
+# 文件管理 API 端点已删除 - 所有分析都通过文件上传进行
 
-    Returns:
-        Dict: 包含文件列表的响应
-    """
-    try:
-        data_dir = Path(DATA_DIRECTORY)
 
-        # 检查数据目录是否存在
-        if not data_dir.exists():
-            logger.warning(f"Data directory does not exist: {DATA_DIRECTORY}")
-            return {"success": True, "files": []}
-
-        files_info = []
-
-        # 遍历目录中的文件
-        for file_path in data_dir.iterdir():
-            if file_path.is_file():
-                # 检查文件类型是否被允许
-                if not is_allowed_file_type(file_path.name):
-                    continue
-
-                # 验证文件路径安全性
-                if not validate_path(file_path.name, DATA_DIRECTORY):
-                    continue
-
-                # 检查文件大小
-                if not check_file_size(str(file_path)):
-                    continue
-
-                try:
-                    # 获取文件统计信息
-                    stat_info = file_path.stat()
-
-                    file_info = {
-                        "name": file_path.name,
-                        "size": stat_info.st_size,
-                        "modified": datetime.fromtimestamp(
-                            stat_info.st_mtime
-                        ).isoformat()
-                        + "Z",
-                    }
-
-                    files_info.append(file_info)
-
-                except (OSError, ValueError) as e:
-                    logger.warning(
-                        f"Error reading file info for {file_path.name}: {str(e)}"
-                    )
-                    continue
-
-        # 按修改时间排序（最新的在前）
-        files_info.sort(key=lambda x: x["modified"], reverse=True)
-
-        logger.info(f"Listed {len(files_info)} files from {DATA_DIRECTORY}")
-
-        return {"success": True, "files": files_info}
-
-    except Exception as e:
-        logger.error(f"Error listing files: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "FILE_LIST_ERROR",
-                "message": "获取文件列表失败",
-                "details": None,
-            },
-        )
+# 服务器文件列表API已删除 - 所有分析都通过文件上传进行
 
 
 def analyze_data_file(file_path: str, filename: str) -> Dict[str, Any]:
@@ -354,63 +302,13 @@ def analyze_data_file(file_path: str, filename: str) -> Dict[str, Any]:
         raise
 
 
-# 数据分析 API 端点
-@app.post("/api/analyze-server-file")
-async def analyze_server_file(filename: str = Form(...)):
-    """
-    分析服务器上的文件
-
-    Args:
-        filename: 服务器文件名
-
-    Returns:
-        Dict: 分析结果
-    """
-    try:
-        # 验证文件操作安全性
-        is_safe, error_msg = validate_file_operation(filename, DATA_DIRECTORY)
-        if not is_safe:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "INVALID_FILE", "message": error_msg, "details": None},
-            )
-
-        # 构建完整文件路径
-        file_path = Path(DATA_DIRECTORY) / filename
-
-        # 检查文件是否存在
-        if not file_path.exists():
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "code": "FILE_NOT_FOUND",
-                    "message": f"文件不存在: {filename}",
-                    "details": None,
-                },
-            )
-
-        # 执行分析
-        result = analyze_data_file(str(file_path), filename)
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in analyze_server_file: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "ANALYSIS_ERROR",
-                "message": "文件分析失败",
-                "details": None,
-            },
-        )
+# 服务器文件分析API已删除 - 所有分析都通过文件上传进行
 
 
 @app.post("/api/upload-and-analyze")
 async def upload_and_analyze(file: UploadFile = File(...)):
     """
-    上传并分析文件
+    上传并分析文件（支持历史记录）
 
     Args:
         file: 上传的文件
@@ -418,8 +316,6 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     Returns:
         Dict: 分析结果
     """
-    import tempfile
-
     try:
         # 验证文件类型
         if not is_allowed_file_type(file.filename):
@@ -432,10 +328,11 @@ async def upload_and_analyze(file: UploadFile = File(...)):
                 },
             )
 
-        # 检查文件大小
+        # 读取文件内容
         content = await file.read()
         file_size = len(content)
 
+        # 检查文件大小
         MAX_UPLOAD_SIZE = 1024 * 1024 * 1024  # 1GB
         if file_size > MAX_UPLOAD_SIZE:
             raise HTTPException(
@@ -447,26 +344,85 @@ async def upload_and_analyze(file: UploadFile = File(...)):
                 },
             )
 
-        # 创建临时文件
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=Path(file.filename).suffix
-        ) as temp_file:
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-
-        try:
-            # 执行分析
-            result = analyze_data_file(temp_file_path, file.filename)
-            return result
-
-        finally:
-            # 清理临时文件
-            try:
-                Path(temp_file_path).unlink()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Failed to cleanup temp file {temp_file_path}: {cleanup_error}"
+        # 计算文件哈希
+        file_hash = calculate_file_hash(content)
+        file_extension = Path(file.filename).suffix
+        
+        # 检查是否已存在相同文件
+        existing_file = await db_manager.get_file_by_hash(file_hash)
+        
+        if existing_file:
+            # 文件已存在，获取最新的分析结果
+            logger.info(f"文件已存在，使用历史记录: {file.filename} (hash: {file_hash})")
+            
+            latest_analysis = await db_manager.get_latest_analysis_by_file_id(existing_file.id)
+            if latest_analysis:
+                # 加载历史分析结果
+                analysis_result = await file_storage_manager.load_analysis_result(
+                    latest_analysis.result_file_path
                 )
+                
+                if analysis_result:
+                    # 添加历史记录标识
+                    analysis_result["from_history"] = True
+                    analysis_result["file_id"] = existing_file.id
+                    analysis_result["analysis_id"] = latest_analysis.id
+                    return analysis_result
+        
+        # 新文件或需要重新分析，保存文件
+        stored_file_path = await file_storage_manager.save_uploaded_file(
+            content, file_hash, file_extension
+        )
+        
+        # 添加文件记录到数据库
+        if not existing_file:
+            from src.reporter.database import FileRecord
+            file_record_obj = FileRecord(
+                filename=file.filename,
+                original_filename=file.filename,
+                file_hash=file_hash,
+                file_size=file_size,
+                file_type=file_extension.lstrip('.'),
+                file_path=str(stored_file_path)
+            )
+            file_record_id = await db_manager.add_file_record(file_record_obj)
+            file_record_obj.id = file_record_id
+            file_record = file_record_obj
+        else:
+            file_record = existing_file
+        
+        # 执行分析
+        analysis_result = analyze_data_file(str(stored_file_path), file.filename)
+        
+        # 保存分析结果
+        from src.reporter.database import AnalysisRecord
+        import json
+        analysis_record_obj = AnalysisRecord(
+            file_id=file_record.id,
+            analysis_result=json.dumps({}),  # 临时空结果，稍后更新
+            result_file_path=""  # 稍后更新
+        )
+        analysis_record_id = await db_manager.add_analysis_record(analysis_record_obj)
+        analysis_record_obj.id = analysis_record_id
+        analysis_record = analysis_record_obj
+        
+        # 保存分析结果到文件
+        result_file_path = await file_storage_manager.save_analysis_result(
+            analysis_result, analysis_record.id
+        )
+        
+        # 更新分析记录的结果文件路径
+        await db_manager.update_analysis_result_path(
+            analysis_record.id, str(result_file_path)
+        )
+        
+        # 添加元数据
+        analysis_result["from_history"] = False
+        analysis_result["file_id"] = file_record.id
+        analysis_result["analysis_id"] = analysis_record.id
+        
+        logger.info(f"文件分析完成: {file.filename} (file_id: {file_record.id})")
+        return analysis_result
 
     except HTTPException:
         raise
@@ -477,6 +433,349 @@ async def upload_and_analyze(file: UploadFile = File(...)):
             detail={
                 "code": "UPLOAD_ANALYSIS_ERROR",
                 "message": "文件上传和分析失败",
+                "details": None,
+            },
+        )
+
+
+# 历史记录 API 端点
+@app.get("/api/file-history")
+@app.get("/api/files/history")
+async def get_file_history(
+    filter: str = Query("all", description="过滤条件"),
+    limit: int = Query(20, description="返回记录数量"),
+    offset: int = Query(0, description="偏移量"),
+    page: int = Query(1, description="页码")
+):
+    """获取文件上传历史记录"""
+    try:
+        # 根据过滤条件确定文件类型
+        file_type = None
+        if filter in ["csv", "parquet"]:
+            file_type = filter
+        
+        # 如果提供了page参数，计算offset
+        if page > 1:
+            offset = (page - 1) * limit
+        
+        history = await db_manager.get_file_history(limit, offset, file_type)
+        has_more = len(history) == limit
+        
+        return {
+            "success": True,
+            "data": {
+                "files": [{
+                    "id": record["id"],
+                    "filename": record["filename"],
+                    "file_type": record["file_type"],
+                    "file_size": record["file_size"],
+                    "rows": 0,  # 暂时设为0，需要从分析结果中获取
+                    "columns": 0,  # 暂时设为0，需要从分析结果中获取
+                    "created_at": record["upload_time"],
+                    "status": "completed"  # 简化状态
+                } for record in history],
+                "has_more": has_more
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取文件历史记录失败: {e}")
+        return {"success": False, "error": {"message": str(e)}}
+
+
+@app.get("/api/files/{file_id}/analysis")
+async def get_file_analysis_history(file_id: int):
+    """
+    获取指定文件的分析历史记录
+    
+    Args:
+        file_id: 文件ID
+    
+    Returns:
+        Dict: 分析历史记录
+    """
+    try:
+        analyses = await db_manager.get_file_analysis_history(file_id)
+        
+        return {
+            "success": True,
+            "data": {
+                "file_id": file_id,
+                "analyses": analyses
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting analysis history for file {file_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "ANALYSIS_HISTORY_ERROR",
+                "message": "获取分析历史失败",
+                "details": None,
+            },
+        )
+
+
+@app.get("/api/analysis/{analysis_id}/result")
+async def get_analysis_result(analysis_id: int):
+    """
+    获取指定分析的详细结果
+    
+    Args:
+        analysis_id: 分析ID
+    
+    Returns:
+        Dict: 分析结果
+    """
+    try:
+        # 获取分析记录
+        analysis_record = await db_manager.get_analysis_record(analysis_id)
+        if not analysis_record:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "ANALYSIS_NOT_FOUND",
+                    "message": "分析记录不存在",
+                    "details": None,
+                },
+            )
+        
+        # 加载分析结果
+        analysis_result = await file_storage_manager.load_analysis_result(
+            analysis_record.result_file_path
+        )
+        
+        if not analysis_result:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "RESULT_FILE_NOT_FOUND",
+                    "message": "分析结果文件不存在",
+                    "details": None,
+                },
+            )
+        
+        # 添加元数据
+        analysis_result["from_history"] = True
+        analysis_result["analysis_id"] = analysis_id
+        analysis_result["file_id"] = analysis_record.file_id
+        
+        return analysis_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting analysis result {analysis_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "RESULT_ERROR",
+                "message": "获取分析结果失败",
+                "details": None,
+            },
+        )
+
+
+@app.post("/api/search")
+async def search_files(request: dict):
+    """搜索文件"""
+    try:
+        query = request.get("query", "").strip()
+        if not query:
+            return {"success": False, "error": {"message": "搜索关键词不能为空"}}
+        
+        results = await db_manager.search_files(query, None)
+        
+        return {
+            "success": True,
+            "results": [{
+                "id": record["id"],
+                "filename": record["filename"],
+                "file_type": record["file_type"],
+                "file_size": record["file_size"],
+                "rows": 0,  # 暂时设为0，需要从分析结果中获取
+                "columns": 0,  # 暂时设为0，需要从分析结果中获取
+                "created_at": record["upload_time"],
+                "relevance": 1.0,  # 简化相关性评分
+                "snippet": f"文件大小: {record['file_size']} 字节"
+            } for record in results]
+        }
+    except Exception as e:
+        logger.error(f"搜索文件失败: {e}")
+        return {"success": False, "error": {"message": str(e)}}
+
+
+@app.get("/api/history/{history_id}")
+async def get_history_result(history_id: int):
+    """
+    获取历史记录的分析结果
+    
+    Args:
+        history_id: 历史记录ID
+    
+    Returns:
+        Dict: 分析结果
+    """
+    try:
+        # 获取文件记录
+        file_record = await db_manager.get_file_record(history_id)
+        if not file_record:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "FILE_NOT_FOUND",
+                    "message": "文件记录不存在",
+                    "details": None,
+                },
+            )
+        
+        # 获取该文件的最新分析结果
+        analyses = await db_manager.get_file_analysis_history(history_id)
+        if not analyses:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "ANALYSIS_NOT_FOUND",
+                    "message": "该文件没有分析结果",
+                    "details": None,
+                },
+            )
+        
+        # 获取最新的分析结果
+        latest_analysis = analyses[0]  # 假设按时间倒序排列
+        analysis_result = await file_storage_manager.load_analysis_result(
+            latest_analysis["result_file_path"]
+        )
+        
+        if not analysis_result:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "RESULT_FILE_NOT_FOUND",
+                    "message": "分析结果文件不存在",
+                    "details": None,
+                },
+            )
+        
+        # 添加元数据
+        analysis_result["from_history"] = True
+        analysis_result["history_id"] = history_id
+        analysis_result["file_id"] = file_record.id
+        
+        return analysis_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting history result {history_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "HISTORY_RESULT_ERROR",
+                "message": "获取历史记录结果失败",
+                "details": None,
+            },
+        )
+
+
+@app.delete("/api/history/{history_id}")
+async def delete_history_item(history_id: int):
+    """
+    删除历史记录
+    
+    Args:
+        history_id: 历史记录ID
+    
+    Returns:
+        Dict: 删除结果
+    """
+    try:
+        # 获取文件记录
+        file_record = await db_manager.get_file_record(history_id)
+        if not file_record:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "FILE_NOT_FOUND",
+                    "message": "文件记录不存在",
+                    "details": None,
+                },
+            )
+        
+        # 删除相关的分析结果文件
+        analyses = await db_manager.get_file_analysis_history(history_id)
+        for analysis in analyses:
+            try:
+                result_file_path = analysis.get("result_file_path")
+                if result_file_path:
+                    await file_storage_manager.delete_analysis_result(result_file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete analysis result file: {e}")
+        
+        # 删除上传的文件
+        try:
+            if file_record.file_path:
+                file_path = Path(file_record.file_path)
+                if file_path.exists():
+                    file_path.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to delete uploaded file: {e}")
+        
+        # 从数据库中删除记录
+        success = await db_manager.delete_file_record(history_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": "历史记录删除成功"
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "DELETE_FAILED",
+                    "message": "删除历史记录失败",
+                    "details": None,
+                },
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting history item {history_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "DELETE_ERROR",
+                "message": "删除历史记录失败",
+                "details": None,
+            },
+        )
+
+
+@app.get("/api/storage/stats")
+async def get_storage_stats():
+    """
+    获取存储统计信息
+    
+    Returns:
+        Dict: 存储统计信息
+    """
+    try:
+        stats = file_storage_manager.get_storage_stats()
+        
+        return {
+            "success": True,
+            "data": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting storage stats: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "STATS_ERROR",
+                "message": "获取存储统计失败",
                 "details": None,
             },
         )
