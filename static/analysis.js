@@ -540,28 +540,174 @@ function displayDetailedStats(statistics, stationarityTests) {
     `;
 }
 
-// 导出结果
+// 导出PDF报告
 function exportResults() {
     if (!analysisData) return;
     
-    // 创建导出数据
-    const exportData = {
-        timestamp: new Date().toISOString(),
-        file_info: analysisData.data.file_info,
-        statistics: analysisData.data.statistics,
-        // 不包含可视化数据以减小文件大小
-    };
+    // 显示导出提示
+    const exportBtn = elements.exportBtn;
+    const originalText = exportBtn.innerHTML;
+    exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在生成PDF...';
+    exportBtn.disabled = true;
     
-    // 下载JSON文件
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analysis_report_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // 准备打印样式
+    preparePrintStyles();
+    
+    // 等待图表完全渲染后再打印
+    setTimeout(() => {
+        // 设置文档标题
+        const originalTitle = document.title;
+        document.title = `数据分析报告_${new Date().toISOString().split('T')[0]}`;
+        
+        // 触发浏览器打印对话框
+        window.print();
+        
+        // 恢复原始状态
+        setTimeout(() => {
+            document.title = originalTitle;
+            exportBtn.innerHTML = originalText;
+            exportBtn.disabled = false;
+            removePrintStyles();
+        }, 1000);
+    }, 500);
+}
+
+// 准备打印样式
+function preparePrintStyles() {
+    // 创建打印专用样式
+    const printStyles = document.createElement('style');
+    printStyles.id = 'print-styles';
+    printStyles.textContent = `
+        @media print {
+            /* 隐藏不需要打印的元素 */
+            .analysis-header,
+            .header-actions,
+            .viz-actions,
+            .error-page,
+            #loading-overlay {
+                display: none !important;
+            }
+            
+            /* 页面设置 */
+            body {
+                background: white !important;
+                color: black !important;
+                font-size: 12pt;
+                line-height: 1.4;
+            }
+            
+            .analysis-page {
+                background: white !important;
+            }
+            
+            .analysis-content {
+                padding: 0 !important;
+            }
+            
+            .content-section {
+                background: white !important;
+                box-shadow: none !important;
+                border: 1px solid #ddd !important;
+                margin-bottom: 20pt !important;
+                page-break-inside: avoid;
+                padding: 15pt !important;
+            }
+            
+            .content-section h3 {
+                color: #333 !important;
+                border-bottom: 2px solid #333;
+                padding-bottom: 5pt;
+                margin-bottom: 15pt !important;
+            }
+            
+            /* 表格样式 */
+            .stats-table {
+                border-collapse: collapse;
+                width: 100%;
+                font-size: 10pt;
+            }
+            
+            .stats-table th,
+            .stats-table td {
+                border: 1px solid #333 !important;
+                padding: 5pt !important;
+                text-align: left;
+            }
+            
+            .stats-table th {
+                background: #f0f0f0 !important;
+                font-weight: bold;
+            }
+            
+            /* 概览卡片 */
+            .overview-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150pt, 1fr));
+                gap: 10pt;
+            }
+            
+            .overview-card {
+                border: 1px solid #ddd !important;
+                padding: 10pt !important;
+                background: white !important;
+                text-align: center;
+            }
+            
+            /* 图表容器 */
+            .viz-item {
+                page-break-inside: avoid;
+                margin-bottom: 20pt;
+                border: 1px solid #ddd;
+                padding: 10pt;
+            }
+            
+            .viz-header h4 {
+                color: #333 !important;
+                margin-bottom: 10pt;
+            }
+            
+            .chart-container {
+                max-height: 400pt;
+                overflow: hidden;
+            }
+            
+            /* 页面标题 */
+            .analysis-page::before {
+                content: "数据分析报告";
+                display: block;
+                font-size: 18pt;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 20pt;
+                padding-bottom: 10pt;
+                border-bottom: 3px solid #333;
+            }
+            
+            /* 页脚信息 */
+            .analysis-page::after {
+                content: "生成时间: " attr(data-timestamp);
+                display: block;
+                font-size: 10pt;
+                text-align: center;
+                margin-top: 20pt;
+                padding-top: 10pt;
+                border-top: 1px solid #ddd;
+            }
+        }
+    `;
+    
+    document.head.appendChild(printStyles);
+    
+    // 设置时间戳
+    document.querySelector('.analysis-page').setAttribute('data-timestamp', new Date().toLocaleString('zh-CN'));
+}
+
+// 移除打印样式
+function removePrintStyles() {
+    const printStyles = document.getElementById('print-styles');
+    if (printStyles) {
+        printStyles.remove();
+    }
 }
 
 // 下载图表
