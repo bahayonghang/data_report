@@ -16,10 +16,10 @@ import logging
 
 class DateTimeEncoder(json.JSONEncoder):
     """自定义JSON编码器，处理datetime对象"""
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        return super().default(obj)
+    def default(self, o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +121,7 @@ class FileStorageManager:
             json.dump(analysis_result, f, ensure_ascii=False, indent=2, cls=DateTimeEncoder)
         
         logger.info(f"分析结果保存成功: {result_path}")
+        # 返回使用正斜杠的标准化路径字符串，确保跨平台兼容性
         return result_path
 
     async def load_analysis_result(self, result_file_path: str) -> Optional[Dict[str, Any]]:
@@ -133,7 +134,14 @@ class FileStorageManager:
             Optional[Dict]: 分析结果数据，如果文件不存在则返回None
         """
         try:
-            result_path = Path(result_file_path)
+            # 处理跨平台路径兼容性：将Windows风格的反斜杠转换为正斜杠
+            normalized_path = result_file_path.replace('\\', '/')
+            result_path = Path(normalized_path)
+            
+            # 如果路径不是绝对路径，则相对于项目根目录
+            if not result_path.is_absolute():
+                result_path = Path.cwd() / result_path
+            
             if not result_path.exists():
                 logger.warning(f"分析结果文件不存在: {result_path}")
                 return None
@@ -254,7 +262,7 @@ class FileStorageManager:
             """计算文件数量"""
             return len(list(directory.rglob(pattern)))
         
-        stats = {
+        stats: Dict[str, Any] = {
             'uploads': {
                 'total_files': count_files(UPLOADS_DIR),
                 'total_size_bytes': get_dir_size(UPLOADS_DIR),
@@ -266,7 +274,7 @@ class FileStorageManager:
                 'total_size_bytes': get_dir_size(ANALYSIS_RESULTS_DIR)
             },
             'database': {
-                'db_size_bytes': DATABASE_DIR.stat().st_size if DATABASE_DIR.exists() else 0
+                'db_size_bytes': int(DATABASE_DIR.stat().st_size) if DATABASE_DIR.exists() else 0
             }
         }
         
@@ -289,11 +297,12 @@ class FileStorageManager:
         Returns:
             str: 格式化后的大小字符串
         """
+        size_float = float(bytes_size)
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if bytes_size < 1024.0:
-                return f"{bytes_size:.1f} {unit}"
-            bytes_size /= 1024.0
-        return f"{bytes_size:.1f} PB"
+            if size_float < 1024.0:
+                return f"{size_float:.1f} {unit}"
+            size_float /= 1024.0
+        return f"{size_float:.1f} PB"
 
 
 # 全局文件存储管理器实例

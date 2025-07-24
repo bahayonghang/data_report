@@ -272,8 +272,10 @@ function showHistoryLoading(loading) {
     if (!historyList) return;
     
     if (loading) {
-        historyList.innerHTML = '<div class="loading-state">加载中...</div>';
+        historyList.innerHTML = '<div class="loading-state">正在加载历史记录...</div>';
     }
+    // 当loading为false时，不需要在这里清除内容
+    // 内容的渲染由renderHistoryList()函数负责
 }
 
 /**
