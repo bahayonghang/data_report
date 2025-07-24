@@ -34,6 +34,40 @@
         <!-- 上传视图 -->
         <section class="view-container" id="upload-view">
             <div class="file-section">
+                <!-- 功能介绍区域 -->
+                <div class="features-overview">
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <h3>智能分析</h3>
+                            <p>自动识别时间序列数据，提供描述性统计、相关性分析和平稳性检验</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <h3>可视化图表</h3>
+                            <p>生成时序图、热力图、分布图和箱形图，支持交互式查看和导出</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <h3>多格式支持</h3>
+                            <p>支持 CSV 和 Parquet 格式，处理大数据集，最大支持 1GB 文件</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-download"></i>
+                            </div>
+                            <h3>报告导出</h3>
+                            <p>一键导出 PDF 分析报告，包含图表和统计结果，方便分享</p>
+                        </div>
+                    </div>
+                </div>
+
                 <h2><i class="fas fa-file-upload"></i> 选择数据文件</h2>
             
             <!-- 文件上传区域 -->
@@ -48,6 +82,70 @@
                         <button class="btn btn-primary" id="upload-btn">
                             <i class="fas fa-plus"></i> 选择文件
                         </button>
+                </div>
+            </div>
+            
+            <!-- 文件格式示例 -->
+            <div class="format-examples">
+                <h4><i class="fas fa-info-circle"></i> 数据格式要求</h4>
+                <div class="examples-grid">
+                    <div class="example-card">
+                        <h5><i class="fas fa-file-csv"></i> CSV 格式示例</h5>
+                        <div class="code-example">
+                            <pre>时间,温度,湿度,压力
+2024-01-01 00:00:00,25.5,60.2,1013.2
+2024-01-01 01:00:00,24.8,62.1,1012.8
+2024-01-01 02:00:00,24.2,63.5,1012.1</pre>
+                        </div>
+                    </div>
+                    <div class="example-card">
+                        <h5><i class="fas fa-table"></i> 数据要求</h5>
+                        <ul class="requirements-list">
+                            <li>包含时间列（可自动识别）</li>
+                            <li>数值类型数据用于分析</li>
+                            <li>列名建议使用中文或英文</li>
+                            <li>时间格式支持多种标准格式</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 最近分析记录预览 -->
+            <div class="recent-analyses">
+                <div class="section-header">
+                    <h3><i class="fas fa-history"></i> 最近分析</h3>
+                    <button class="btn btn-secondary btn-sm" onclick="switchView('history')">
+                        <i class="fas fa-eye"></i> 查看全部
+                    </button>
+                </div>
+                <div class="recent-list" id="recent-analyses-list">
+                    <div class="loading-recent">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>加载最近分析记录...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速统计面板 -->
+            <div class="quick-stats">
+                <h3><i class="fas fa-chart-pie"></i> 系统统计</h3>
+                <div class="stats-grid" id="system-stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-files">-</div>
+                        <div class="stat-label">已分析文件</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-analyses">-</div>
+                        <div class="stat-label">分析次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="data-processed">-</div>
+                        <div class="stat-label">处理数据量</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="avg-processing-time">-</div>
+                        <div class="stat-label">平均处理时间</div>
+                    </div>
                 </div>
             </div>
             
@@ -74,10 +172,7 @@
                 </div>
                 
                 <div class="history-list" id="history-list">
-                    <div class="loading-state">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <p>正在加载历史记录...</p>
-                    </div>
+                    <!-- 历史记录将在这里动态加载 -->
                 </div>
                 
                 <button class="btn btn-secondary" id="load-more-history" style="display: none;">

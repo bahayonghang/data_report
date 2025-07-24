@@ -219,6 +219,9 @@ function renderHistoryList() {
     const historyList = document.getElementById('history-list');
     if (!historyList) return;
     
+    // 首先清空加载状态和所有现有内容
+    historyList.innerHTML = '';
+    
     if (historyData.length === 0) {
         historyList.innerHTML = '<div class="empty-state">暂无历史记录</div>';
         return;

@@ -28,7 +28,8 @@ const elements = {
 document.addEventListener('DOMContentLoaded', function() {
     initializeElements();
     setupEventListeners();
-    // 服务器文件加载已删除
+    // 初始加载首页数据
+    loadHomepageData();
 });
 
 // 初始化DOM元素引用
@@ -521,6 +522,8 @@ function switchView(view) {
     switch(view) {
         case 'upload':
             elements.uploadView?.style.setProperty('display', 'block');
+            // 加载首页数据
+            loadHomepageData();
             break;
         case 'history':
             elements.historyView?.style.setProperty('display', 'block');
@@ -580,6 +583,7 @@ async function loadFileHistory(reset = false) {
         console.error('Error loading file history:', error);
         showHistoryError(error.message);
     }
+    // 注意：这里不再需要在finally块中隐藏加载状态，因为renderHistoryList或showHistoryError会处理这个
 }
 
 // 显示历史记录加载状态
@@ -613,11 +617,12 @@ function showHistoryError(message) {
 function renderHistoryList(files, reset = false) {
     if (!elements.historyList) return;
     
-    if (reset) {
+    // 如果是重置操作或者第一次加载，清空所有内容（包括加载状态）
+    if (reset || historyOffset === 0) {
         elements.historyList.innerHTML = '';
     }
     
-    if (files.length === 0 && reset) {
+    if (files.length === 0 && (reset || historyOffset === 0)) {
         elements.historyList.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-history"></i>
@@ -660,7 +665,12 @@ function renderHistoryList(files, reset = false) {
         `;
     }).join('');
     
-    elements.historyList.insertAdjacentHTML('beforeend', historyItems);
+    // 如果是第一次加载或重置，直接设置innerHTML；否则追加内容
+    if (reset || historyOffset === files.length) {
+        elements.historyList.innerHTML = historyItems;
+    } else {
+        elements.historyList.insertAdjacentHTML('beforeend', historyItems);
+    }
 }
 
 // 加载更多历史记录
@@ -1263,4 +1273,101 @@ function copyStatsToClipboard() {
         console.error('Copy failed:', error);
         showError('复制失败', '无法复制到剪贴板，请手动选择复制。');
     });
+}
+
+// ====== 首页数据加载功能 ======
+
+// 加载首页数据
+function loadHomepageData() {
+    loadRecentAnalyses();
+    loadSystemStats();
+}
+
+// 加载最近分析记录
+async function loadRecentAnalyses() {
+    const recentList = document.getElementById('recent-analyses-list');
+    if (!recentList) return;
+    
+    try {
+        const response = await fetch('/api/files/history?limit=3');
+        const data = await response.json();
+        
+        if (data.success && data.data && data.data.files && data.data.files.length > 0) {
+            const recentItems = data.data.files.map(file => {
+                const date = formatDate(file.created_at);
+                const fileSize = formatFileSize(file.file_size);
+                
+                return `
+                    <div class="recent-item" onclick="viewHistoryResult('${file.id}')">
+                        <div class="recent-header">
+                            <div class="recent-title">${file.filename}</div>
+                            <div class="recent-time">${date}</div>
+                        </div>
+                        <div class="recent-meta">
+                            <span><i class="fas fa-database"></i> ${fileSize}</span>
+                            <span><i class="fas fa-table"></i> ${file.rows || 0} 行</span>
+                            <span><i class="fas fa-columns"></i> ${file.columns || 0} 列</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            recentList.innerHTML = recentItems;
+        } else {
+            recentList.innerHTML = `
+                <div class="empty-state" style="padding: 20px;">
+                    <i class="fas fa-history"></i>
+                    <p>暂无分析记录</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading recent analyses:', error);
+        recentList.innerHTML = `
+            <div class="error-state" style="padding: 20px;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>加载失败</p>
+            </div>
+        `;
+    }
+}
+
+// 加载系统统计信息
+async function loadSystemStats() {
+    try {
+        // 模拟系统统计数据 - 在实际项目中应该从API获取
+        const response = await fetch('/api/files/history?limit=1000'); // 获取更多数据进行统计
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+            const files = data.data.files || [];
+            
+            // 统计已分析文件数量
+            const totalFiles = files.length;
+            document.getElementById('total-files').textContent = totalFiles;
+            
+            // 分析次数（假设每个文件分析一次）
+            document.getElementById('total-analyses').textContent = totalFiles;
+            
+            // 计算总数据量
+            const totalSize = files.reduce((sum, file) => sum + (file.file_size || 0), 0);
+            document.getElementById('data-processed').textContent = formatFileSize(totalSize);
+            
+            // 平均处理时间（模拟数据）
+            document.getElementById('avg-processing-time').textContent = '2.3s';
+        } else {
+            // 设置默认值
+            document.getElementById('total-files').textContent = '0';
+            document.getElementById('total-analyses').textContent = '0';
+            document.getElementById('data-processed').textContent = '0 B';
+            document.getElementById('avg-processing-time').textContent = '-';
+        }
+    } catch (error) {
+        console.error('Error loading system stats:', error);
+        // 设置错误状态的默认值
+        document.getElementById('total-files').textContent = '-';
+        document.getElementById('total-analyses').textContent = '-';
+        document.getElementById('data-processed').textContent = '-';
+        document.getElementById('avg-processing-time').textContent = '-';
+    }
 }

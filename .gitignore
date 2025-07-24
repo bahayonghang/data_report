@@ -207,3 +207,6 @@ marimo/_lsp/
 __marimo__/
 
 .claude/
+
+# 存放给claude code 的截图
+imgs/
