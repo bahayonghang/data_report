@@ -71,7 +71,7 @@ uv sync
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
 # 或
-venv\Scripts\activate     # Windows
+venc\Scripts\activate     # Windows
 
 # 安装依赖
 pip install -e .

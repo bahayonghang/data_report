@@ -10,6 +10,7 @@
 - **安全可靠**: 内置文件安全检查和路径验证
 - **易于使用**: 直观的Web界面，支持文件上传和服务器文件选择
 - **高性能**: 基于Polars和FastAPI构建，处理大数据集高效
+- **历史记录**: 保存和查询历史分析结果
 
 ## 📊 分析功能
 
@@ -40,6 +41,8 @@ graph TB
     B --> I["Security Module"]
     I --> J["File Validation"]
     I --> K["Path Verification"]
+    B --> L["Database (SQLite)"]
+    L --> M["File & Analysis History"]
 ```
 
 ## 🛠️ 技术栈
@@ -48,6 +51,7 @@ graph TB
 - **数据处理**: Polars + NumPy
 - **统计分析**: Statsmodels
 - **可视化**: Plotly
+- **数据库**: SQLite (via aiosqlite & SQLAlchemy)
 - **前端**: HTML5 + CSS3 + JavaScript
 - **部署**: Docker + Nginx
 - **监控**: Prometheus
@@ -56,7 +60,7 @@ graph TB
 
 1. **安装依赖**
    ```bash
-   uv sync --group docs
+   uv sync --all-groups
    ```
 
 2. **启动服务**
@@ -69,11 +73,30 @@ graph TB
 
 ## 📚 文档导航
 
-- [安装指南](getting-started/installation.md) - 详细的安装和配置说明
-- [基本使用](getting-started/basic-usage.md) - 快速上手指南
-- [API文档](api/overview.md) - 完整的API接口文档
-- [开发指南](development/environment.md) - 开发环境搭建和代码贡献
-- [部署运维](deployment/deployment.md) - 生产环境部署指南
+- **入门指南**
+    - [安装指南](getting-started/installation.md)
+    - [快速上手](getting-started/quick-start.md)
+    - [基本使用](getting-started/basic-usage.md)
+    - [配置说明](getting-started/configuration.md)
+- **用户手册**
+    - [界面指南](user-guide/interface.md)
+    - [结果解读](user-guide/result-interpretation.md)
+- **API 文档**
+    - [API 概览](api/overview.md)
+    - [端点详解](api/endpoints.md)
+    - [数据模型](api/data-models.md)
+- **开发**
+    - [环境设置](development/setup.md)
+    - [贡献指南](development/contributing.md)
+    - [测试指南](development/testing.md)
+- **架构**
+    - [系统概览](architecture/overview.md)
+    - [技术栈](architecture/tech-stack.md)
+    - [数据流](architecture/data-flow.md)
+- **部署**
+    - [部署指南](deployment/deployment.md)
+    - [Docker 指南](deployment/docker.md)
+    - [故障排除](deployment/troubleshooting.md)
 
 ## 🤝 贡献
 
@@ -82,15 +105,3 @@ graph TB
 ## 📄 许可证
 
 本项目采用 MIT 许可证。详情请查看 [LICENSE](https://github.com/your-username/data_report/blob/main/LICENSE) 文件。
-
-## 📞 支持
-
-如果您遇到问题或有任何建议，请：
-
-- 提交 [GitHub Issue](https://github.com/your-username/data_report/issues)
-- 查看[故障排除指南](deployment/troubleshooting.md)
-- 联系开发团队
-
----
-
-*最后更新: {{ git.date.strftime('%Y-%m-%d') }}*

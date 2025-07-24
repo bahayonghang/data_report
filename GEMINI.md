@@ -1,6 +1,6 @@
-# CLAUDE.md
+# GEMINI.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Gemini Code (gemini.ai/code) when working with code in this repository.
 
 ## AI助手核心规则
 - 请始终保持对话语言为中文。
