@@ -189,20 +189,50 @@ function validateAndUploadFile(file) {
 async function uploadAndAnalyze(file) {
     if (isAnalyzing) return;
     
+    // 创建AbortController用于超时控制
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, 120000); // 2分钟超时
+    
     try {
         showProgress('正在上传和分析文件...', '正在上传文件: ' + file.name);
         isAnalyzing = true;
         
         // 模拟上传进度
-        updateProgress(30, '正在上传文件...');
+        updateProgress(10, '正在上传文件...');
         
         const formData = new FormData();
         formData.append('file', file);
         
+        // 添加超时和错误处理的fetch请求
         const response = await fetch('/api/upload-and-analyze', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal,
+            // 添加请求头以便后端识别
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
         });
+        
+        // 清除超时定时器
+        clearTimeout(timeoutId);
+        
+        updateProgress(60, '正在处理数据...');
+        
+        // 检查HTTP状态码
+        if (!response.ok) {
+            let errorMessage = `HTTP错误: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail?.message || errorData.message || errorMessage;
+            } catch (parseError) {
+                // 如果无法解析错误响应，使用默认错误信息
+                console.warn('无法解析错误响应:', parseError);
+            }
+            throw new Error(errorMessage);
+        }
         
         updateProgress(80, '正在生成分析结果...');
         
@@ -225,12 +255,30 @@ async function uploadAndAnalyze(file) {
                 hideProgress();
             }, 500);
         } else {
-            throw new Error(data.error?.message || '分析失败');
+            throw new Error(data.error?.message || data.message || '分析失败');
         }
     } catch (error) {
+        // 清除超时定时器
+        clearTimeout(timeoutId);
+        
         console.error('Error uploading and analyzing file:', error);
         hideProgress();
-        showError('文件上传分析失败', error.message);
+        
+        // 根据错误类型提供更详细的错误信息
+        let errorTitle = '文件上传分析失败';
+        let errorMessage = error.message;
+        
+        if (error.name === 'AbortError') {
+            errorTitle = '请求超时';
+            errorMessage = '文件分析时间过长，请尝试上传较小的文件或稍后重试。';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorTitle = '网络连接错误';
+            errorMessage = '无法连接到服务器，请检查网络连接后重试。';
+        } else if (error.message.includes('HTTP错误')) {
+            errorTitle = '服务器错误';
+        }
+        
+        showError(errorTitle, errorMessage);
     } finally {
         isAnalyzing = false;
         // 重置文件输入

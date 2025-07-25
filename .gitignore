@@ -210,3 +210,6 @@ __marimo__/
 
 # 存放给claude code 的截图
 imgs/
+data/
+
+uv.lock

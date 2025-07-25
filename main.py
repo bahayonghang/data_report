@@ -34,7 +34,12 @@ from src.reporter.visualization.charts import (
     create_correlation_heatmap,
     create_distribution_plots,
     create_box_plots,
+    create_charts_batch,
+    create_charts_parallel
 )
+from src.reporter.analysis.parallel_processor import ParallelProcessor, optimize_dataframe_processing
+from src.reporter.utils.performance import PerformanceMonitor, ResourceManager, monitor_performance, optimize_polars_settings
+import asyncio
 from src.reporter.database import DatabaseManager, calculate_file_hash
 from src.reporter.file_manager import file_storage_manager
 
@@ -174,6 +179,7 @@ async def health_check():
 # 服务器文件列表API已删除 - 所有分析都通过文件上传进行
 
 
+@monitor_performance
 def analyze_data_file(file_path: str, filename: str) -> Dict[str, Any]:
     """
     分析数据文件的核心函数
@@ -185,97 +191,245 @@ def analyze_data_file(file_path: str, filename: str) -> Dict[str, Any]:
     Returns:
         Dict[str, Any]: 分析结果
     """
+    import time
+    start_time = time.time()
+    
+    # 初始化性能监控和资源管理
+    performance_monitor = PerformanceMonitor()
+    resource_manager = ResourceManager(memory_limit_mb=2048)  # 2GB内存限制
+    
+    # 优化Polars设置
+    optimize_polars_settings()
+    
     try:
-        # 加载数据
+        logger.info(f"开始分析文件: {filename}")
+        
+        # 阶段1: 加载数据 (10%)
+        logger.info("阶段1: 加载数据...")
         df = load_data_file(file_path)
+        # 优化数据框处理
+        df = optimize_dataframe_processing(df)
+        logger.info(f"数据加载完成，共{df.height}行，{df.width}列")
+        
+        # 检查内存使用情况
+        if not resource_manager.check_resource_availability():
+            logger.warning("内存使用接近限制，启用内存优化")
+            resource_manager.optimize_memory_usage()
 
-        # 准备分析数据
+        # 阶段2: 准备分析数据 (20%)
+        logger.info("阶段2: 准备分析数据...")
         data_info = prepare_analysis_data(df)
-
+        
         # 获取基本信息
         time_column = data_info.get("time_column")
         numeric_columns = data_info.get("numeric_columns", [])
         processed_df = data_info.get("processed_df")
+        warnings = data_info.get("warnings", [])
+        
+        # 验证处理后的数据
+        if processed_df is None:
+            raise ValueError("数据预处理失败，无法获取处理后的数据")
+        
+        if warnings:
+            for warning in warnings:
+                logger.warning(f"数据预处理警告: {warning}")
+        
+        logger.info(f"数据预处理完成，时间列: {time_column}, 数值列: {len(numeric_columns)}个")
 
-        # 计算描述性统计
+        # 阶段3: 计算描述性统计 (30%)
+        logger.info("阶段3: 计算描述性统计...")
         descriptive_stats = calculate_descriptive_stats(processed_df, numeric_columns)
+        logger.info("描述性统计计算完成")
 
-        # 分析缺失值
+        # 阶段4: 分析缺失值 (40%)
+        logger.info("阶段4: 分析缺失值...")
         missing_values = analyze_missing_values(processed_df)
+        logger.info("缺失值分析完成")
 
-        # 计算相关性矩阵
+        # 阶段5: 计算相关性矩阵 (50%)
+        logger.info("阶段5: 计算相关性矩阵...")
         correlation_matrix = calculate_correlation_matrix(processed_df, numeric_columns)
+        if correlation_matrix.get("warnings"):
+            for warning in correlation_matrix["warnings"]:
+                logger.warning(f"相关性分析警告: {warning}")
+        logger.info("相关性矩阵计算完成")
 
-        # 时间序列分析
+        # 阶段6: 时间序列分析 (60%) - 优化版本
+        logger.info("阶段6: 时间序列分析（优化版本）...")
         time_info = {}
         stationarity_tests = {}
+        time_series_performance = {}
 
         if time_column:
-            time_series = processed_df[time_column]
-            time_info = calculate_time_range(time_series)
+            try:
+                # 使用优化的时间序列分析
+                from src.reporter.analysis.time_series import analyze_time_series_optimized
+                
+                logger.info(f"开始优化时间序列分析，数据量: {len(processed_df)} 行")
+                
+                # 执行优化的时间序列分析
+                time_series_result = analyze_time_series_optimized(
+                    df=processed_df,
+                    time_column=time_column,
+                    numeric_columns=numeric_columns,
+                    performance_threshold=10000  # 超过1万行启用采样
+                )
+                
+                # 提取结果
+                time_info = time_series_result.get("time_analysis", {})
+                stationarity_tests = time_series_result.get("adf_tests", {})
+                time_series_performance = time_series_result.get("performance_metrics", {})
+                
+                # 记录性能信息
+                sampling_info = time_series_result.get("sampling_info", {})
+                if sampling_info.get("sampling_method") != "none":
+                    logger.info(
+                        f"时间序列分析采用采样优化: {sampling_info['original_size']} -> "
+                        f"{sampling_info['sampled_size']} 行 "
+                        f"(方法: {sampling_info['sampling_method']}, "
+                        f"性能提升: {sampling_info.get('performance_gain', 1):.1f}x)"
+                    )
+                
+                logger.info(
+                    f"时间序列分析完成: 处理了 {time_series_performance.get('processed_rows', 0)} 行数据, "
+                    f"分析了 {time_series_performance.get('columns_analyzed', 0)} 个列, "
+                    f"执行了 {time_series_performance.get('adf_tests_performed', 0)} 个ADF检验"
+                )
+                
+            except Exception as e:
+                logger.warning(f"优化时间序列分析失败，降级到基础分析: {e}")
+                # 降级到原始方法（但限制处理量）
+                try:
+                    time_series = processed_df[time_column]
+                    time_info = calculate_time_range(time_series)
+                    
+                    # 限制ADF检验的列数以提高性能
+                    max_adf_columns = min(len(numeric_columns), 3)
+                    logger.info(f"降级模式：仅对前{max_adf_columns}个数值列进行ADF检验")
+                    
+                    for i, col in enumerate(numeric_columns[:max_adf_columns]):
+                        try:
+                            stationarity_tests[col] = perform_adf_test(processed_df[col])
+                        except Exception as adf_error:
+                            logger.warning(f"ADF检验失败 {col}: {adf_error}")
+                            stationarity_tests[col] = {"error": str(adf_error)}
+                    
+                    logger.info(f"降级时间序列分析完成，检验了{len(stationarity_tests)}个数值列")
+                except Exception as fallback_error:
+                    logger.error(f"降级时间序列分析也失败: {fallback_error}")
+        else:
+            logger.info("未检测到时间列，跳过时间序列分析")
 
-            # 对每个数值列进行ADF检验
-            for col in numeric_columns:
-                stationarity_tests[col] = perform_adf_test(processed_df[col])
-
-        # 生成可视化图表
+        # 阶段7: 生成可视化图表 (70%-100%)
+        logger.info("阶段7: 生成可视化图表...")
         visualizations = {}
-
-        # 时序图表
-        if time_column and numeric_columns:
-            try:
-                visualizations["time_series"] = create_time_series_plot(
-                    processed_df, time_column, numeric_columns
+        
+        # 尝试使用并行处理生成图表
+        try:
+            # 检查是否有足够的资源进行并行处理
+            if resource_manager.check_resource_availability():
+                logger.info("使用批量处理生成图表")
+                charts_result = create_charts_batch(
+                    df=processed_df,
+                    time_col=time_column,
+                    numeric_cols=numeric_columns,
+                    correlation_matrix=correlation_matrix
                 )
-            except Exception as viz_error:
-                logger.warning(f"Failed to create time series plot: {viz_error}")
-                visualizations["time_series"] = {"error": "时序图表生成失败"}
-
-        # 相关性热力图
-        if len(numeric_columns) > 1 and correlation_matrix.get("matrix"):
-            # 为热力图准备相关系数矩阵
-            import polars as pl
-
-            corr_data = []
-            matrix_data = correlation_matrix["matrix"]
-
-            for col1 in numeric_columns:
-                row = {"variable": col1}
-                for col2 in numeric_columns:
-                    row[col2] = matrix_data.get(col1, {}).get(col2, 0.0)
-                corr_data.append(row)
-
-            try:
-                corr_df = pl.DataFrame(corr_data)
-                visualizations["correlation_heatmap"] = create_correlation_heatmap(
-                    corr_df
-                )
-            except Exception as viz_error:
-                logger.warning(f"Failed to create correlation heatmap: {viz_error}")
-                visualizations["correlation_heatmap"] = {
-                    "error": "相关性热力图生成失败"
+            else:
+                logger.warning("资源不足，使用串行处理生成图表")
+                # 降级到串行处理
+                charts_result = {
+                    'time_series_plot': None,
+                    'distribution_plots': {},
+                    'box_plots': {},
+                    'correlation_heatmap': None
                 }
+            
+            # 提取结果（修复键名映射）
+            visualizations["time_series"] = charts_result.get('time_series', {"error": "时序图表生成失败"})
+            visualizations["distributions"] = charts_result.get('distribution', {"error": "分布直方图生成失败"})
+            visualizations["box_plots"] = charts_result.get('box_plots', {"error": "箱形图生成失败"})
+            visualizations["correlation_heatmap"] = charts_result.get('correlation', {"error": "相关性热力图生成失败"})
+            
+            logger.info("所有图表生成完成")
+            
+        except Exception as e:
+            logger.error(f"图表生成过程出错: {e}")
+            # 降级到串行处理
+            logger.info("降级到串行处理生成图表")
+            
+            # 时序图表 (75%)
+            if time_column and numeric_columns:
+                try:
+                    logger.info("生成时序图表...")
+                    visualizations["time_series"] = create_time_series_plot(
+                        processed_df, time_column, numeric_columns
+                    )
+                    logger.info("时序图表生成成功")
+                except Exception as viz_error:
+                    logger.warning(f"时序图表生成失败: {viz_error}")
+                    visualizations["time_series"] = {"error": "时序图表生成失败"}
 
-        # 分布直方图
-        if numeric_columns:
-            try:
-                visualizations["distributions"] = create_distribution_plots(
-                    processed_df, numeric_columns
-                )
-            except Exception as viz_error:
-                logger.warning(f"Failed to create distribution plots: {viz_error}")
-                visualizations["distributions"] = {"error": "分布直方图生成失败"}
+            # 相关性热力图 (80%)
+            if len(numeric_columns) > 1 and correlation_matrix.get("matrix"):
+                try:
+                    logger.info("生成相关性热力图...")
+                    # 为热力图准备相关系数矩阵
+                    import polars as pl
 
-        # 箱形图
-        if numeric_columns:
-            try:
-                visualizations["box_plots"] = create_box_plots(
-                    processed_df, numeric_columns
-                )
-            except Exception as viz_error:
-                logger.warning(f"Failed to create box plots: {viz_error}")
-                visualizations["box_plots"] = {"error": "箱形图生成失败"}
+                    corr_data = []
+                    matrix_data = correlation_matrix["matrix"]
 
+                    for col1 in numeric_columns:
+                        row = {"variable": col1}
+                        for col2 in numeric_columns:
+                            row[col2] = matrix_data.get(col1, {}).get(col2, 0.0)
+                        corr_data.append(row)
+
+                    corr_df = pl.DataFrame(corr_data)
+                    visualizations["correlation_heatmap"] = create_correlation_heatmap(
+                        corr_df
+                    )
+                    logger.info("相关性热力图生成成功")
+                except Exception as viz_error:
+                    logger.warning(f"相关性热力图生成失败: {viz_error}")
+                    visualizations["correlation_heatmap"] = {
+                        "error": "相关性热力图生成失败"
+                    }
+
+            # 分布直方图 (90%)
+            if numeric_columns:
+                try:
+                    logger.info("生成分布直方图...")
+                    visualizations["distributions"] = create_distribution_plots(
+                        processed_df, numeric_columns
+                    )
+                    logger.info(f"分布直方图生成成功，共{len(visualizations['distributions'])}个图表")
+                except Exception as viz_error:
+                    logger.warning(f"分布直方图生成失败: {viz_error}")
+                    visualizations["distributions"] = {"error": "分布直方图生成失败"}
+
+            # 箱形图 (95%)
+            if numeric_columns:
+                try:
+                    logger.info("生成箱形图...")
+                    visualizations["box_plots"] = create_box_plots(
+                        processed_df, numeric_columns
+                    )
+                    logger.info(f"箱形图生成成功，共{len(visualizations['box_plots'])}个图表")
+                except Exception as viz_error:
+                    logger.warning(f"箱形图生成失败: {viz_error}")
+                    visualizations["box_plots"] = {"error": "箱形图生成失败"}
+        
+        logger.info("所有可视化图表生成完成")
+        
+        # 获取性能监控摘要
+        performance_summary = performance_monitor.get_performance_summary()
+        logger.info(f"性能监控摘要: {performance_summary}")
+        
+        # 最终内存优化
+        resource_manager.optimize_memory_usage()
+        
         # 构建完整响应
         result = {
             "success": True,
@@ -291,10 +445,16 @@ def analyze_data_file(file_path: str, filename: str) -> Dict[str, Any]:
                 "correlation_matrix": correlation_matrix,
                 "stationarity_tests": stationarity_tests,
                 "visualizations": visualizations,
+                "performance_info": {
+                    "total_execution_time": f"{time.time() - start_time:.2f}秒",
+                    "memory_usage": f"{performance_monitor.get_memory_usage():.2f}MB",
+                    "operations_count": performance_summary.get("总操作数", 0),
+                    "time_series_optimization": time_series_performance
+                }
             },
         }
 
-        logger.info(f"Successfully analyzed file: {filename}")
+        logger.info(f"Successfully analyzed file: {filename} in {time.time() - start_time:.2f}s")
         return result
 
     except Exception as e:
@@ -318,7 +478,7 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     """
     try:
         # 验证文件类型
-        if not is_allowed_file_type(file.filename):
+        if not file.filename or not is_allowed_file_type(file.filename):
             raise HTTPException(
                 status_code=400,
                 detail={
@@ -351,12 +511,12 @@ async def upload_and_analyze(file: UploadFile = File(...)):
         # 检查是否已存在相同文件
         existing_file = await db_manager.get_file_by_hash(file_hash)
         
-        if existing_file:
+        if existing_file and existing_file.id is not None:
             # 文件已存在，获取最新的分析结果
             logger.info(f"文件已存在，使用历史记录: {file.filename} (hash: {file_hash})")
             
             latest_analysis = await db_manager.get_latest_analysis_by_file_id(existing_file.id)
-            if latest_analysis:
+            if latest_analysis and latest_analysis.id is not None:
                 # 加载历史分析结果
                 analysis_result = await file_storage_manager.load_analysis_result(
                     latest_analysis.result_file_path
@@ -386,6 +546,15 @@ async def upload_and_analyze(file: UploadFile = File(...)):
                 file_path=str(stored_file_path)
             )
             file_record_id = await db_manager.add_file_record(file_record_obj)
+            if file_record_id is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "code": "FILE_RECORD_ERROR",
+                        "message": "文件记录保存失败",
+                        "details": None,
+                    },
+                )
             file_record_obj.id = file_record_id
             file_record = file_record_obj
         else:
@@ -393,6 +562,17 @@ async def upload_and_analyze(file: UploadFile = File(...)):
         
         # 执行分析
         analysis_result = analyze_data_file(str(stored_file_path), file.filename)
+        
+        # 确保file_record.id不为None
+        if file_record.id is None:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "FILE_RECORD_ID_ERROR",
+                    "message": "文件记录ID获取失败",
+                    "details": None,
+                },
+            )
         
         # 保存分析结果
         from src.reporter.database import AnalysisRecord
@@ -403,17 +583,26 @@ async def upload_and_analyze(file: UploadFile = File(...)):
             result_file_path=""  # 稍后更新
         )
         analysis_record_id = await db_manager.add_analysis_record(analysis_record_obj)
+        if analysis_record_id is None:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "code": "ANALYSIS_RECORD_ERROR",
+                    "message": "分析记录保存失败",
+                    "details": None,
+                },
+            )
         analysis_record_obj.id = analysis_record_id
         analysis_record = analysis_record_obj
         
         # 保存分析结果到文件
         result_file_path = await file_storage_manager.save_analysis_result(
-            analysis_result, analysis_record.id
+            analysis_result, analysis_record_id
         )
         
         # 更新分析记录的结果文件路径
         await db_manager.update_analysis_result_path(
-            analysis_record.id, str(result_file_path)
+            analysis_record_id, str(result_file_path)
         )
         
         # 添加元数据
@@ -584,7 +773,7 @@ async def search_files(request: dict):
         if not query:
             return {"success": False, "error": {"message": "搜索关键词不能为空"}}
         
-        results = await db_manager.search_files(query, None)
+        results = await db_manager.search_files(query, 50)  # 默认限制50条结果
         
         return {
             "success": True,

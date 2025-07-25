@@ -4,7 +4,9 @@
 import polars as pl
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from typing import Dict, List
+from typing import Dict, List, Any, Optional
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .theme import (
     get_chart_theme,
     get_color_sequence,
@@ -14,96 +16,352 @@ from .theme import (
     get_hover_template,
     CORRELATION_COLORS,
 )
+from ..utils.performance import monitor_performance
+from ..analysis.parallel_processor import AsyncVisualizationProcessor, optimize_dataframe_processing
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
+async def create_charts_parallel(df: pl.DataFrame, time_col: Optional[str], numeric_cols: List[str], 
+                                correlation_matrix: Optional[Dict[str, Dict[str, float]]] = None) -> Dict[str, Any]:
+    """
+    并行生成所有图表
+    
+    Args:
+        df: 数据框
+        time_col: 时间列名
+        numeric_cols: 数值列列表
+        correlation_matrix: 相关性矩阵
+        
+    Returns:
+        包含所有图表的字典
+    """
+    logger.info("开始并行生成图表")
+    
+    # 优化数据框处理
+    df_optimized = optimize_dataframe_processing(df)
+    
+    # 创建异步可视化处理器
+    viz_processor = AsyncVisualizationProcessor()
+    
+    try:
+        # 准备任务列表
+        viz_tasks = []
+        
+        # 时间序列图
+        if time_col and len(numeric_cols) > 0:
+            viz_tasks.append(('time_series', create_time_series_plot, (df_optimized, time_col, numeric_cols[:5]), {}))
+        
+        # 分布图
+        if len(numeric_cols) > 0:
+            viz_tasks.append(('distribution', create_distribution_plots, (df_optimized, numeric_cols[:10]), {}))
+        
+        # 箱形图
+        if len(numeric_cols) > 0:
+            viz_tasks.append(('box_plots', create_box_plots, (df_optimized, numeric_cols[:10]), {}))
+        
+        # 相关性热力图
+        if correlation_matrix:
+            viz_tasks.append(('correlation', create_correlation_heatmap, (correlation_matrix,), {}))
+        
+        # 并行执行任务
+        results = await viz_processor.create_multiple_visualizations(viz_tasks)
+        
+        logger.info(f"并行图表生成完成，共生成 {len(results)} 个图表")
+        return results
+        
+    except Exception as e:
+        logger.error(f"并行图表生成失败: {e}")
+        # 降级到串行处理
+        return await _create_charts_fallback(df_optimized, time_col, numeric_cols, correlation_matrix)
+
+
+async def _create_charts_fallback(df: pl.DataFrame, time_col: Optional[str], numeric_cols: List[str],
+                                 correlation_matrix: Optional[Dict[str, Dict[str, float]]] = None) -> Dict[str, Any]:
+    """
+    降级处理：串行生成图表
+    
+    Args:
+        df: 数据框
+        time_col: 时间列名
+        numeric_cols: 数值列列表
+        correlation_matrix: 相关性矩阵
+        
+    Returns:
+        包含所有图表的字典
+    """
+    logger.warning("使用降级模式串行生成图表")
+    
+    results = {}
+    
+    try:
+        # 时间序列图
+        if time_col and len(numeric_cols) > 0:
+            results['time_series'] = create_time_series_plot(df, time_col, numeric_cols[:5])
+        
+        # 分布图
+        if len(numeric_cols) > 0:
+            results['distribution'] = create_distribution_plots(df, numeric_cols[:10])
+        
+        # 箱形图
+        if len(numeric_cols) > 0:
+            results['box_plots'] = create_box_plots(df, numeric_cols[:10])
+        
+        # 相关性热力图
+        if correlation_matrix:
+            results['correlation'] = create_correlation_heatmap(correlation_matrix)
+            
+    except Exception as e:
+        logger.error(f"降级图表生成也失败: {e}")
+        results['error'] = str(e)
+    
+    return results
+
+
+def create_charts_batch(df: pl.DataFrame, time_col: Optional[str], numeric_cols: List[str],
+                       correlation_matrix: Optional[Dict[str, Dict[str, float]]] = None,
+                       max_workers: int = 4) -> Dict[str, Any]:
+    """
+    批量并行生成图表（同步接口）
+    
+    Args:
+        df: 数据框
+        time_col: 时间列名
+        numeric_cols: 数值列列表
+        correlation_matrix: 相关性矩阵
+        max_workers: 最大工作线程数
+        
+    Returns:
+        包含所有图表的字典
+    """
+    logger.info(f"开始批量生成图表，使用 {max_workers} 个工作线程")
+    
+    # 优化数据框处理
+    df_optimized = optimize_dataframe_processing(df)
+    
+    results = {}
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交任务
+        future_to_chart = {}
+        
+        # 时间序列图
+        if time_col and len(numeric_cols) > 0:
+            future = executor.submit(create_time_series_plot, df_optimized, time_col, numeric_cols[:5])
+            future_to_chart[future] = 'time_series'
+        
+        # 分布图
+        if len(numeric_cols) > 0:
+            future = executor.submit(create_distribution_plots, df_optimized, numeric_cols[:10])
+            future_to_chart[future] = 'distribution'
+        
+        # 箱形图
+        if len(numeric_cols) > 0:
+            future = executor.submit(create_box_plots, df_optimized, numeric_cols[:10])
+            future_to_chart[future] = 'box_plots'
+        
+        # 相关性热力图
+        if correlation_matrix:
+            future = executor.submit(create_correlation_heatmap, correlation_matrix)
+            future_to_chart[future] = 'correlation'
+        
+        # 收集结果
+        for future in as_completed(future_to_chart):
+            chart_type = future_to_chart[future]
+            try:
+                result = future.result(timeout=30)  # 30秒超时
+                results[chart_type] = result
+                logger.info(f"{chart_type} 图表生成完成")
+            except Exception as e:
+                logger.error(f"{chart_type} 图表生成失败: {e}")
+                results[chart_type] = {'error': str(e)}
+    
+    logger.info(f"批量图表生成完成，成功生成 {len([r for r in results.values() if 'error' not in r])} 个图表")
+    return results
+
+# 可视化配置常量
+MAX_POINTS_FOR_VISUALIZATION = 10000  # 最大可视化点数
+MAX_COLUMNS_FOR_HEATMAP = 50  # 热力图最大列数
+SAMPLE_SIZE_LARGE_DATA = 5000  # 大数据集采样大小
+
+
+def _sample_data_for_visualization(df: pl.DataFrame, max_points: int = MAX_POINTS_FOR_VISUALIZATION) -> pl.DataFrame:
+    """为可视化采样数据以提高性能"""
+    try:
+        if df.height <= max_points:
+            return df
+        
+        # 计算采样步长
+        step = df.height // max_points
+        logger.info(f"数据量过大({df.height}行)，采样每{step}行用于可视化")
+        
+        # 使用等间隔采样
+        sampled_df = df.slice(0, max_points).filter(pl.int_range(pl.len()) % step == 0)
+        return sampled_df
+    except Exception as e:
+        logger.warning(f"数据采样失败: {e}，使用原始数据")
+        return df
+
+
+@monitor_performance
 def create_time_series_plot(
     df: pl.DataFrame,
     time_col: str,
     value_cols: List[str],
     device_type: str = "desktop",
     size: str = "large",
-) -> Dict:
-    """创建时序图表"""
-    if not value_cols:
-        return {"error": "没有可用的数值列"}
-
-    fig = go.Figure()
-
-    # 获取时间数据
-    time_data = df[time_col].to_list()  # 改为to_list()确保是Python列表
-    colors = get_color_sequence(len(value_cols))
-
-    # 为每个数值列添加一条线
-    for i, col in enumerate(value_cols):
-        if col != time_col:  # 确保不包含时间列本身
-            y_data = df[col].to_list()  # 改为to_list()确保是Python列表
-            fig.add_trace(
-                go.Scatter(
-                    x=time_data,
-                    y=y_data,
-                    mode="lines+markers",
-                    name=col,
-                    line=dict(width=2.5, color=colors[i % len(colors)]),
-                    marker=dict(size=4, color=colors[i % len(colors)]),
-                    hovertemplate=get_hover_template("time_series", col),
+) -> List[Dict]:
+    """创建时序图表 - 为每个变量创建单独的图表"""
+    plots = []
+    
+    try:
+        # 输入验证
+        if not value_cols:
+            logger.warning("没有可用的数值列")
+            return plots
+        
+        if time_col not in df.columns:
+            logger.error(f"时间列 '{time_col}' 不存在")
+            return plots
+        
+        # 过滤有效的数值列
+        valid_cols = [col for col in value_cols if col in df.columns and col != time_col]
+        if not valid_cols:
+            logger.warning("没有有效的数值列")
+            return plots
+        
+        # 数据采样以提高性能
+        sampled_df = _sample_data_for_visualization(df)
+        
+        # 检查数据是否为空
+        if sampled_df.height == 0:
+            logger.warning("数据为空")
+            return plots
+        
+        # 获取时间数据
+        time_data = sampled_df[time_col].to_list()
+        colors = get_color_sequence(len(valid_cols))
+        
+        # 为每个数值列创建单独的图表
+        for i, col in enumerate(valid_cols):
+            try:
+                y_data = sampled_df[col].to_list()
+                
+                # 检查数据有效性
+                if not y_data or all(val is None for val in y_data):
+                    logger.warning(f"列 '{col}' 数据为空，跳过")
+                    continue
+                
+                # 创建单独的图表
+                fig = go.Figure()
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_data,
+                        y=y_data,
+                        mode="lines+markers",
+                        name=col,
+                        line=dict(width=2.5, color=colors[i % len(colors)]),
+                        marker=dict(size=4, color=colors[i % len(colors)]),
+                        hovertemplate=get_hover_template("time_series", col),
+                        showlegend=True
+                    )
                 )
-            )
+                
+                # 应用主题配置
+                layout = get_chart_theme("time_series", size)
+                layout["title"]["text"] = f"{col} 时间序列趋势"
+                layout["yaxis"]["title"] = col
+                layout["xaxis"]["title"] = "时间"
+                
+                # 应用响应式尺寸
+                layout = apply_responsive_sizing(layout, device_type)
+                
+                fig.update_layout(layout)
+                
+                # 增强交互性
+                fig_dict = fig.to_dict()
+                fig_dict = enhance_interactivity(fig_dict)
+                
+                plots.append(fig_dict)
+                
+            except Exception as e:
+                logger.warning(f"处理列 '{col}' 时出错: {e}")
+                continue
+        
+        logger.info(f"成功创建 {len(plots)} 个时间序列图表")
+        return plots
+        
+    except Exception as e:
+        logger.error(f"创建时序图表失败: {e}")
+        return plots
 
-    # 应用主题配置
-    layout = get_chart_theme("time_series", size)
-    layout["title"]["text"] = "时间序列趋势图"
 
-    # 应用响应式尺寸
-    layout = apply_responsive_sizing(layout, device_type)
-
-    fig.update_layout(layout)
-
-    # 增强交互性
-    fig_dict = fig.to_dict()
-    fig_dict = enhance_interactivity(fig_dict)
-
-    return fig_dict
-
-
+@monitor_performance
 def create_correlation_heatmap(
     corr_matrix: pl.DataFrame, device_type: str = "desktop", size: str = "medium"
 ) -> Dict:
     """创建相关性热力图"""
-    # 将 Polars DataFrame 转换为 numpy 数组
-    corr_values = corr_matrix.select(pl.exclude("variable")).to_numpy()
-    column_names = corr_matrix.columns[1:]  # 排除第一列 variable
-
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=corr_values,
-            x=column_names,
-            y=corr_matrix["variable"].to_list(),
-            colorscale=CORRELATION_COLORS,
-            zmid=0,
-            zmin=-1,
-            zmax=1,
-            colorbar=dict(title="相关系数", title_font=dict(size=12)),
-            hovertemplate=get_hover_template("heatmap"),
-            showscale=True,
+    try:
+        # 输入验证
+        if corr_matrix.height == 0 or corr_matrix.width <= 1:
+            return {"error": "相关性矩阵数据为空或无效"}
+        
+        # 检查矩阵大小，避免过大的热力图
+        if corr_matrix.height > MAX_COLUMNS_FOR_HEATMAP:
+            logger.warning(f"相关性矩阵过大({corr_matrix.height}x{corr_matrix.width})，截取前{MAX_COLUMNS_FOR_HEATMAP}列")
+            corr_matrix = corr_matrix.head(MAX_COLUMNS_FOR_HEATMAP)
+        
+        # 将 Polars DataFrame 转换为 numpy 数组
+        try:
+            corr_values = corr_matrix.select(pl.exclude("variable")).to_numpy()
+            column_names = corr_matrix.columns[1:]  # 排除第一列 variable
+            variable_names = corr_matrix["variable"].to_list()
+        except Exception as e:
+            logger.error(f"转换相关性矩阵数据失败: {e}")
+            return {"error": "相关性矩阵数据格式错误"}
+        
+        # 检查数据有效性
+        if corr_values.size == 0:
+            return {"error": "相关性矩阵数据为空"}
+        
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=corr_values,
+                x=column_names,
+                y=variable_names,
+                colorscale=CORRELATION_COLORS,
+                zmid=0,
+                zmin=-1,
+                zmax=1,
+                colorbar=dict(title="相关系数", title_font=dict(size=12)),
+                hovertemplate=get_hover_template("heatmap"),
+                showscale=True,
+            )
         )
-    )
+        
+        # 应用主题配置
+        layout = get_chart_theme("heatmap", size)
+        layout["title"]["text"] = "变量相关性热力图"
+        
+        # 应用响应式尺寸
+        layout = apply_responsive_sizing(layout, device_type)
+        
+        fig.update_layout(layout)
+        
+        # 增强交互性
+        fig_dict = fig.to_dict()
+        fig_dict = enhance_interactivity(fig_dict)
+        
+        return fig_dict
+        
+    except Exception as e:
+        logger.error(f"创建相关性热力图失败: {e}")
+        return {"error": f"创建相关性热力图失败: {str(e)}"}
 
-    # 应用主题配置
-    layout = get_chart_theme("heatmap", size)
-    layout["title"]["text"] = "变量相关性热力图"
 
-    # 应用响应式尺寸
-    layout = apply_responsive_sizing(layout, device_type)
-
-    fig.update_layout(layout)
-
-    # 增强交互性
-    fig_dict = fig.to_dict()
-    fig_dict = enhance_interactivity(fig_dict)
-
-    return fig_dict
-
-
+@monitor_performance
 def create_distribution_plots(
     df: pl.DataFrame,
     columns: List[str],
@@ -112,50 +370,84 @@ def create_distribution_plots(
 ) -> List[Dict]:
     """创建分布直方图"""
     plots = []
-
-    for i, col in enumerate(columns):
-        # 获取非空数据
-        data = df[col].drop_nulls().to_list()  # 改为to_list()
-
-        if len(data) == 0:
-            continue
-
-        color = get_single_color(i)
-
-        fig = go.Figure(
-            data=[
-                go.Histogram(
-                    x=data,
-                    nbinsx=30,
-                    name=col,
-                    marker_color=color,
-                    opacity=0.8,
-                    marker_line=dict(width=1, color="white"),
-                    hovertemplate=get_hover_template("histogram", col),
+    
+    try:
+        # 输入验证
+        if not columns:
+            logger.warning("没有提供列名")
+            return plots
+        
+        # 数据采样以提高性能
+        sampled_df = _sample_data_for_visualization(df)
+        
+        for i, col in enumerate(columns):
+            try:
+                # 检查列是否存在
+                if col not in sampled_df.columns:
+                    logger.warning(f"列 '{col}' 不存在，跳过")
+                    continue
+                
+                # 获取非空数据
+                data = sampled_df[col].drop_nulls().to_list()
+                
+                # 检查数据有效性
+                if len(data) == 0:
+                    logger.warning(f"列 '{col}' 没有有效数据，跳过")
+                    continue
+                
+                # 检查数据类型（应该是数值型）
+                if not all(isinstance(x, (int, float)) for x in data[:100]):  # 检查前100个值
+                    logger.warning(f"列 '{col}' 包含非数值数据，跳过")
+                    continue
+                
+                color = get_single_color(i)
+                
+                # 动态调整bin数量
+                nbins = min(30, max(10, len(data) // 100))
+                
+                fig = go.Figure(
+                    data=[
+                        go.Histogram(
+                            x=data,
+                            nbinsx=nbins,
+                            name=col,
+                            marker_color=color,
+                            opacity=0.8,
+                            marker_line=dict(width=1, color="white"),
+                            hovertemplate=get_hover_template("histogram", col),
+                        )
+                    ]
                 )
-            ]
-        )
+                
+                # 应用主题配置
+                layout = get_chart_theme("histogram", size)
+                layout["title"]["text"] = f"{col} 分布直方图"
+                layout["xaxis"]["title"] = col
+                layout["yaxis"]["title"] = "频次"
+                
+                # 应用响应式尺寸
+                layout = apply_responsive_sizing(layout, device_type)
+                
+                fig.update_layout(layout)
+                
+                # 增强交互性
+                fig_dict = fig.to_dict()
+                fig_dict = enhance_interactivity(fig_dict)
+                
+                plots.append(fig_dict)
+                
+            except Exception as e:
+                logger.warning(f"创建列 '{col}' 的分布图失败: {e}")
+                continue
+        
+        return plots
+        
+    except Exception as e:
+        logger.error(f"创建分布图失败: {e}")
+        return plots
 
-        # 应用主题配置
-        layout = get_chart_theme("histogram", size)
-        layout["title"]["text"] = f"{col} 分布直方图"
-        layout["xaxis"]["title"] = col
-        layout["yaxis"]["title"] = "频次"
 
-        # 应用响应式尺寸
-        layout = apply_responsive_sizing(layout, device_type)
-
-        fig.update_layout(layout)
-
-        # 增强交互性
-        fig_dict = fig.to_dict()
-        fig_dict = enhance_interactivity(fig_dict)
-
-        plots.append(fig_dict)
-
-    return plots
-
-
+@monitor_performance
 def create_box_plots(
     df: pl.DataFrame,
     columns: List[str],
@@ -164,48 +456,83 @@ def create_box_plots(
 ) -> List[Dict]:
     """创建箱形图"""
     plots = []
-
-    for i, col in enumerate(columns):
-        # 获取非空数据
-        data = df[col].drop_nulls().to_list()  # 改为to_list()
-
-        if len(data) == 0:
-            continue
-
-        color = get_single_color(i)
-
-        fig = go.Figure(
-            data=[
-                go.Box(
-                    y=data,
-                    name=col,
-                    marker_color=color,
-                    boxpoints="outliers",  # 显示异常值点
-                    boxmean=True,  # 显示均值
-                    hovertemplate=get_hover_template("box", col),
-                    fillcolor=color,
-                    line=dict(color=color, width=2),
+    
+    try:
+        # 输入验证
+        if not columns:
+            logger.warning("没有提供列名")
+            return plots
+        
+        # 数据采样以提高性能
+        sampled_df = _sample_data_for_visualization(df)
+        
+        for i, col in enumerate(columns):
+            try:
+                # 检查列是否存在
+                if col not in sampled_df.columns:
+                    logger.warning(f"列 '{col}' 不存在，跳过")
+                    continue
+                
+                # 获取非空数据
+                data = sampled_df[col].drop_nulls().to_list()
+                
+                # 检查数据有效性
+                if len(data) == 0:
+                    logger.warning(f"列 '{col}' 没有有效数据，跳过")
+                    continue
+                
+                # 检查数据类型（应该是数值型）
+                if not all(isinstance(x, (int, float)) for x in data[:100]):  # 检查前100个值
+                    logger.warning(f"列 '{col}' 包含非数值数据，跳过")
+                    continue
+                
+                # 检查数据量是否足够绘制箱形图
+                if len(data) < 5:
+                    logger.warning(f"列 '{col}' 数据量不足({len(data)}个)，跳过")
+                    continue
+                
+                color = get_single_color(i)
+                
+                fig = go.Figure(
+                    data=[
+                        go.Box(
+                            y=data,
+                            name=col,
+                            marker_color=color,
+                            boxpoints="outliers",  # 显示异常值点
+                            boxmean=True,  # 显示均值
+                            hovertemplate=get_hover_template("box", col),
+                            fillcolor=color,
+                            line=dict(color=color, width=2),
+                        )
+                    ]
                 )
-            ]
-        )
-
-        # 应用主题配置
-        layout = get_chart_theme("box", size)
-        layout["title"]["text"] = f"{col} 箱形图"
-        layout["yaxis"]["title"] = col
-
-        # 应用响应式尺寸
-        layout = apply_responsive_sizing(layout, device_type)
-
-        fig.update_layout(layout)
-
-        # 增强交互性
-        fig_dict = fig.to_dict()
-        fig_dict = enhance_interactivity(fig_dict)
-
-        plots.append(fig_dict)
-
-    return plots
+                
+                # 应用主题配置
+                layout = get_chart_theme("box", size)
+                layout["title"]["text"] = f"{col} 箱形图"
+                layout["yaxis"]["title"] = col
+                
+                # 应用响应式尺寸
+                layout = apply_responsive_sizing(layout, device_type)
+                
+                fig.update_layout(layout)
+                
+                # 增强交互性
+                fig_dict = fig.to_dict()
+                fig_dict = enhance_interactivity(fig_dict)
+                
+                plots.append(fig_dict)
+                
+            except Exception as e:
+                logger.warning(f"创建列 '{col}' 的箱形图失败: {e}")
+                continue
+        
+        return plots
+        
+    except Exception as e:
+        logger.error(f"创建箱形图失败: {e}")
+        return plots
 
 
 def create_summary_dashboard(

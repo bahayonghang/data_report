@@ -296,13 +296,17 @@ function displayVisualizations(visualizations) {
     
     const vizItems = [];
     
-    // 时序图表
-    if (visualizations.time_series && !visualizations.time_series.error) {
-        vizItems.push({
-            id: 'time-series-chart',
-            title: '时间序列趋势图',
-            data: visualizations.time_series,
-            description: '展示数据随时间变化的趋势'
+    // 时序图表 - 现在是数组，每个变量一个图表
+    if (visualizations.time_series && Array.isArray(visualizations.time_series)) {
+        visualizations.time_series.forEach((chart, index) => {
+            if (!chart.error) {
+                vizItems.push({
+                    id: `time-series-chart-${index}`,
+                    title: chart.title || `时间序列趋势图 ${index + 1}`,
+                    data: chart,
+                    description: '展示数据随时间变化的趋势'
+                });
+            }
         });
     }
     

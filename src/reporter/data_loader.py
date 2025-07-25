@@ -31,18 +31,18 @@ def load_data_file(file_path: str, max_rows: int = 1000000) -> pl.DataFrame:
         ValueError: 不支持的文件格式或数据过大
         FileNotFoundError: 文件不存在
     """
-    file_path = Path(file_path)
+    file_path_obj = Path(file_path)
 
-    if not file_path.exists():
+    if not file_path_obj.exists():
         raise FileNotFoundError(f"文件不存在: {file_path}")
 
-    file_size = file_path.stat().st_size
+    file_size = file_path_obj.stat().st_size
     
     # 大文件警告
     if file_size > 1024 * 1024 * 1024:  # 1GB
         logging.warning(f"处理大文件: {file_size / 1024 / 1024:.1f}MB")
 
-    suffix = file_path.suffix.lower()
+    suffix = file_path_obj.suffix.lower()
 
     try:
         if suffix == ".csv":
@@ -139,7 +139,7 @@ def detect_time_column(df: pl.DataFrame) -> Optional[str]:
 
 def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[str, Any]:
     """
-    准备分析数据，分离时间列和数值列，支持大数据集优化
+    准备分析数据，分离时间列和数值列，支持大数据集优化（增强版本）
 
     Args:
         df: 原始数据框
@@ -152,10 +152,12 @@ def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[s
         raise ValueError("数据框为空")
 
     total_rows = len(df)
+    warnings_list = []
     
     # 大数据集采样
     if total_rows > sample_size:
         logging.info(f"大数据集采样: {total_rows} -> {sample_size} 行")
+        warnings_list.append(f"数据集过大，已采样至 {sample_size} 行进行分析")
         df = df.sample(sample_size, seed=42)
 
     time_column = detect_time_column(df)
@@ -175,6 +177,30 @@ def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[s
     if not numeric_columns:
         raise ValueError("没有找到数值列进行分析")
 
+    # 预处理：检查并移除常数列（零方差列）
+    import numpy as np
+    valid_numeric_columns = []
+    constant_columns = []
+    
+    for col in numeric_columns:
+        col_data = df[col].drop_nulls()
+        if len(col_data) > 0:
+            values = col_data.to_numpy()
+            col_std = np.std(values, ddof=1)
+            if col_std < 1e-10:  # 接近零的阈值
+                constant_columns.append(col)
+                warnings_list.append(f"列 '{col}' 为常数列，已从数值分析中排除")
+            else:
+                valid_numeric_columns.append(col)
+        else:
+            warnings_list.append(f"列 '{col}' 全为缺失值，已从数值分析中排除")
+    
+    # 更新数值列列表
+    numeric_columns = valid_numeric_columns
+    
+    if not numeric_columns:
+        raise ValueError("没有找到有效的数值列进行分析（所有数值列都是常数列或全为缺失值）")
+
     # 数据预处理优化：使用lazy evaluation
     processed_df = df.lazy()
 
@@ -182,42 +208,65 @@ def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[s
     if time_column:
         col_dtype = df[time_column].dtype
         if col_dtype == pl.Utf8:
-            # 批量尝试多种格式
-            processed_df = processed_df.with_columns(
-                pl.col(time_column)
-                .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S%.f", strict=False)
-                .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=False)
-                .str.strptime(pl.Datetime, format="%Y-%m-%d", strict=False)
-                .str.strptime(pl.Datetime, format="%Y/%m/%d", strict=False)
-                .alias(time_column)
-            )
+            try:
+                # 批量尝试多种格式
+                processed_df = processed_df.with_columns(
+                    pl.col(time_column)
+                    .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S%.f", strict=False)
+                    .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=False)
+                    .str.strptime(pl.Datetime, format="%Y-%m-%d", strict=False)
+                    .str.strptime(pl.Datetime, format="%Y/%m/%d", strict=False)
+                    .alias(time_column)
+                )
+            except Exception as e:
+                warnings_list.append(f"时间列 '{time_column}' 转换失败: {str(e)}")
+                time_column = None
         elif str(col_dtype).startswith("datetime"):
             pass  # 已经是datetime类型
 
     # 收集结果
-    processed_df = processed_df.collect()
+    try:
+        processed_df = processed_df.collect()
+    except Exception as e:
+        logging.error(f"数据处理失败: {str(e)}")
+        # 回退到原始数据框
+        processed_df = df
+        warnings_list.append(f"数据预处理失败，使用原始数据: {str(e)}")
 
     # 按时间排序（如果有时序列）
-    if time_column:
-        processed_df = processed_df.sort(time_column)
+    if time_column and time_column in processed_df.columns:
+        try:
+            processed_df = processed_df.sort(time_column)
+        except Exception as e:
+            warnings_list.append(f"时间排序失败: {str(e)}")
 
     # 优化：批量计算缺失值
     missing_values = {}
     for col in df.columns:
         null_count = df[col].null_count()
-        if null_count > 0:
-            missing_values[col] = {
-                "missing_count": null_count,
-                "missing_ratio": null_count / total_rows
-            }
+        missing_values[col] = {
+            "missing_count": null_count,
+            "missing_ratio": null_count / total_rows if total_rows > 0 else 0
+        }
 
+    # 内存优化：释放不需要的数据
+    sampled_rows = len(df)
+    
     return {
         "original_df": df,
         "processed_df": processed_df,
         "time_column": time_column,
         "numeric_columns": numeric_columns,
+        "constant_columns": constant_columns,
         "total_rows": total_rows,
         "total_columns": len(df.columns),
-        "sampled_rows": len(df) if total_rows > sample_size else total_rows,
+        "sampled_rows": sampled_rows,
         "missing_values": missing_values,
+        "warnings": warnings_list,
+        "data_quality": {
+            "valid_numeric_columns": len(numeric_columns),
+            "constant_columns_count": len(constant_columns),
+            "has_time_column": time_column is not None,
+            "missing_data_ratio": sum(info["missing_count"] for info in missing_values.values()) / (total_rows * len(df.columns)) if total_rows > 0 else 0
+        }
     }
