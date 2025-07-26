@@ -1,0 +1,47 @@
+{
+  "data_processing": {
+    "chunk_size_mb": 100,
+    "max_memory_usage_mb": 2048,
+    "parallel_workers": 4,
+    "enable_caching": true,
+    "cache_dir": "cache",
+    "temp_dir": "temp"
+  },
+  "analysis": {
+    "correlation_threshold": 0.7,
+    "significance_level": 0.05,
+    "max_categories": 50,
+    "sample_size_threshold": 10000,
+    "enable_time_series": true,
+    "enable_correlation": true,
+    "enable_outlier_detection": true
+  },
+  "output": {
+    "format": "json",
+    "include_charts": true,
+    "chart_format": "png",
+    "output_dir": "output",
+    "filename_template": "analysis_{timestamp}",
+    "compress_results": false
+  },
+  "performance": {
+    "enable_profiling": false,
+    "memory_monitoring": true,
+    "gc_threshold": 0.8,
+    "max_execution_time": 3600,
+    "progress_update_interval": 1.0
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "logs/app.log",
+    "max_size_mb": 10,
+    "backup_count": 5
+  },
+  "database": {
+    "enabled": false,
+    "url": null,
+    "pool_size": 5,
+    "timeout": 30
+  }
+}

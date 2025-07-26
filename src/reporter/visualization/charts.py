@@ -49,17 +49,17 @@ async def create_charts_parallel(df: pl.DataFrame, time_col: Optional[str], nume
         # 准备任务列表
         viz_tasks = []
         
-        # 时间序列图
+        # 时间序列图 - 显示所有数值变量
         if time_col and len(numeric_cols) > 0:
-            viz_tasks.append(('time_series', create_time_series_plot, (df_optimized, time_col, numeric_cols[:5]), {}))
+            viz_tasks.append(('time_series', create_time_series_plot, (df_optimized, time_col, numeric_cols), {}))
         
-        # 分布图
+        # 分布图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            viz_tasks.append(('distribution', create_distribution_plots, (df_optimized, numeric_cols[:10]), {}))
+            viz_tasks.append(('distribution', create_distribution_plots, (df_optimized, numeric_cols), {}))
         
-        # 箱形图
+        # 箱形图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            viz_tasks.append(('box_plots', create_box_plots, (df_optimized, numeric_cols[:10]), {}))
+            viz_tasks.append(('box_plots', create_box_plots, (df_optimized, numeric_cols), {}))
         
         # 相关性热力图
         if correlation_matrix:
@@ -96,21 +96,41 @@ async def _create_charts_fallback(df: pl.DataFrame, time_col: Optional[str], num
     results = {}
     
     try:
-        # 时间序列图
+        # 时间序列图 - 显示所有数值变量
         if time_col and len(numeric_cols) > 0:
-            results['time_series'] = create_time_series_plot(df, time_col, numeric_cols[:5])
+            results['time_series'] = create_time_series_plot(df, time_col, numeric_cols)
         
-        # 分布图
+        # 分布图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            results['distribution'] = create_distribution_plots(df, numeric_cols[:10])
+            results['distribution'] = create_distribution_plots(df, numeric_cols)
         
-        # 箱形图
+        # 箱形图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            results['box_plots'] = create_box_plots(df, numeric_cols[:10])
+            results['box_plots'] = create_box_plots(df, numeric_cols)
         
         # 相关性热力图
-        if correlation_matrix:
-            results['correlation'] = create_correlation_heatmap(correlation_matrix)
+        if correlation_matrix and correlation_matrix.get("matrix"):
+            try:
+                corr_data = []
+                matrix_data = correlation_matrix["matrix"]
+                
+                # 使用数值列名构建相关性矩阵
+                for col1 in numeric_cols:
+                    row: Dict[str, Any] = {"variable": col1}
+                    for col2 in numeric_cols:
+                        col1_data = matrix_data.get(col1, {})
+                        if isinstance(col1_data, dict):
+                            value = col1_data.get(col2, 0.0)
+                            row[col2] = float(value) if value is not None else 0.0
+                        else:
+                            row[col2] = 0.0
+                    corr_data.append(row)
+                
+                corr_df = pl.DataFrame(corr_data)
+                results['correlation'] = create_correlation_heatmap(corr_df)
+            except Exception as e:
+                logger.error(f"转换相关性矩阵格式失败: {e}")
+                results['correlation'] = {'error': f'相关性矩阵格式转换失败: {str(e)}'}
             
     except Exception as e:
         logger.error(f"降级图表生成也失败: {e}")
@@ -120,7 +140,7 @@ async def _create_charts_fallback(df: pl.DataFrame, time_col: Optional[str], num
 
 
 def create_charts_batch(df: pl.DataFrame, time_col: Optional[str], numeric_cols: List[str],
-                       correlation_matrix: Optional[Dict[str, Dict[str, float]]] = None,
+                       correlation_matrix: Optional[Dict[str, Any]] = None,
                        max_workers: int = 4) -> Dict[str, Any]:
     """
     批量并行生成图表（同步接口）
@@ -146,25 +166,46 @@ def create_charts_batch(df: pl.DataFrame, time_col: Optional[str], numeric_cols:
         # 提交任务
         future_to_chart = {}
         
-        # 时间序列图
+        # 时间序列图 - 显示所有数值变量
         if time_col and len(numeric_cols) > 0:
-            future = executor.submit(create_time_series_plot, df_optimized, time_col, numeric_cols[:5])
+            future = executor.submit(create_time_series_plot, df_optimized, time_col, numeric_cols)
             future_to_chart[future] = 'time_series'
         
-        # 分布图
+        # 分布图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            future = executor.submit(create_distribution_plots, df_optimized, numeric_cols[:10])
+            future = executor.submit(create_distribution_plots, df_optimized, numeric_cols)
             future_to_chart[future] = 'distribution'
         
-        # 箱形图
+        # 箱形图 - 显示所有数值变量
         if len(numeric_cols) > 0:
-            future = executor.submit(create_box_plots, df_optimized, numeric_cols[:10])
+            future = executor.submit(create_box_plots, df_optimized, numeric_cols)
             future_to_chart[future] = 'box_plots'
         
         # 相关性热力图
-        if correlation_matrix:
-            future = executor.submit(create_correlation_heatmap, correlation_matrix)
-            future_to_chart[future] = 'correlation'
+        if correlation_matrix and correlation_matrix.get("matrix"):
+            # 将字典格式的相关性矩阵转换为DataFrame格式
+            try:
+                corr_data = []
+                matrix_data = correlation_matrix["matrix"]
+                
+                # 使用数值列名构建相关性矩阵
+                for col1 in numeric_cols:
+                    row: Dict[str, Any] = {"variable": col1}
+                    for col2 in numeric_cols:
+                        col1_data = matrix_data.get(col1, {})
+                        if isinstance(col1_data, dict):
+                            value = col1_data.get(col2, 0.0)
+                            row[col2] = float(value) if value is not None else 0.0
+                        else:
+                            row[col2] = 0.0
+                    corr_data.append(row)
+                
+                corr_df = pl.DataFrame(corr_data)
+                future = executor.submit(create_correlation_heatmap, corr_df)
+                future_to_chart[future] = 'correlation'
+            except Exception as e:
+                logger.error(f"转换相关性矩阵格式失败: {e}")
+                results['correlation'] = {'error': f'相关性矩阵格式转换失败: {str(e)}'}
         
         # 收集结果
         for future in as_completed(future_to_chart):

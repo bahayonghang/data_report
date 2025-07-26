@@ -58,11 +58,12 @@ AXIS_CONFIG = {
 }
 
 # 响应式尺寸配置
+# 针对2列布局优化的尺寸设置
 RESPONSIVE_CONFIG = {
-    "small": {"width": 400, "height": 300},
-    "medium": {"width": 600, "height": 400},
-    "large": {"width": 800, "height": 500},
-    "dashboard": {"width": 1200, "height": 800},
+    "small": {"width": 350, "height": 250},  # 移动端单列布局
+    "medium": {"width": 450, "height": 300},  # 桌面端2列布局
+    "large": {"width": 800, "height": 500},   # 特殊大图
+    "dashboard": {"width": 1200, "height": 800},  # 仪表板
 }
 
 # 交互配置

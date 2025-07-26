@@ -35,6 +35,91 @@ document.addEventListener('DOMContentLoaded', function() {
     startAnalysis();
 });
 
+// ====== 工具函数 ======
+
+/**
+ * 格式化数据大小
+ * @param {number} bytes - 字节数
+ * @returns {string} - 格式化后的大小字符串
+ */
+function formatDataSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * 重新生成图表（当图表数据被压缩时）
+ * @param {string} containerId - 图表容器ID
+ */
+function regenerateChart(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div style="text-align: center; color: #6c757d; padding: 40px;">
+            <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 15px;"></i>
+            <h4 style="margin: 10px 0;">图表重新生成功能</h4>
+            <p style="margin: 10px 0;">此功能需要重新请求服务器数据。</p>
+            <p style="font-size: 0.9rem; color: #8d6e63;">请返回首页重新分析文件以获取完整的图表数据。</p>
+            <div style="margin-top: 20px;">
+                <button class="btn btn-secondary btn-sm" onclick="window.location.href='/'">
+                    <i class="fas fa-home"></i> 返回首页
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 显示数据压缩提示信息
+ * @param {Object} compressionInfo - 压缩信息
+ */
+function displayCompressionNotice(compressionInfo) {
+    // 在页面顶部插入压缩提示
+    const noticeHtml = `
+        <div class="compression-notice" style="
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border: 1px solid #f1c40f;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <i class="fas fa-compress-alt" style="font-size: 1.5rem; color: #f39c12;"></i>
+                <div style="flex: 1;">
+                    <h4 style="margin: 0 0 8px 0; color: #d68910; font-size: 1.1rem;">
+                        <i class="fas fa-info-circle"></i> 数据已压缩显示
+                    </h4>
+                    <p style="margin: 0; color: #8d6e63; line-height: 1.4;">
+                        为了解决浏览器存储限制，部分可视化图表数据已被压缩。统计数据和分析结果完整保留。
+                    </p>
+                    ${compressionInfo && compressionInfo.timestamp ? `
+                        <p style="margin: 5px 0 0 0; font-size: 0.9rem; color: #95a5a6;">
+                            压缩时间: ${new Date(compressionInfo.timestamp).toLocaleString('zh-CN')}
+                        </p>
+                    ` : ''}
+                </div>
+                <button class="btn btn-outline-primary btn-sm" onclick="window.location.href='/'" style="
+                    border-color: #f39c12;
+                    color: #f39c12;
+                    white-space: nowrap;
+                ">
+                    <i class="fas fa-redo"></i> 重新分析
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // 将提示插入到分析容器的开头
+    if (elements.analysisContainer) {
+        elements.analysisContainer.insertAdjacentHTML('afterbegin', noticeHtml);
+    }
+}
+
 // 初始化DOM元素引用
 function initializeElements() {
     elements.loadingOverlay = document.getElementById('loading-overlay');
@@ -211,6 +296,11 @@ function displayAnalysisResults(data) {
         elements.analysisTimestamp.textContent = new Date().toLocaleString('zh-CN');
     }
     
+    // 检查数据是否被压缩，如果是则显示提示
+    if (data.compressed) {
+        displayCompressionNotice(data.compression_info);
+    }
+    
     // 显示各个部分
     displayFileOverview(resultData.file_info, resultData.time_info);
     displayStatsSummary(resultData.statistics, resultData.missing_values);
@@ -283,28 +373,67 @@ function displayStatsSummary(statistics, missingValues) {
     });
     
     elements.statsSummary.innerHTML = `
-        <h3><i class="fas fa-chart-pie"></i> 统计摘要</h3>
-        <div class="overview-grid">
-            ${summaryCards}
+        <div class="stats-section-container">
+            <div class="stats-section-header" onclick="toggleStatsSection('stats-summary')">
+                <div class="stats-section-title">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>统计摘要</span>
+                    <span class="stats-count">(${columns.length}个变量)</span>
+                </div>
+                <div class="stats-section-toggle">
+                    <i class="fas fa-chevron-down" id="toggle-stats-summary"></i>
+                </div>
+            </div>
+            <div class="stats-section-description">显示各变量的基本统计信息和缺失值情况</div>
+            <div class="stats-section-content collapsed" id="content-stats-summary">
+                <div class="overview-grid stats-scrollable">
+                    ${summaryCards}
+                </div>
+            </div>
         </div>
     `;
 }
 
-// 显示可视化图表
+// 显示可视化图表 - 支持可折叠分组
 function displayVisualizations(visualizations) {
     if (!elements.visualizations || !visualizations) return;
     
-    const vizItems = [];
+    // 按图表类型分组
+    const chartGroups = {
+        time_series: {
+            title: '时间序列图表',
+            icon: 'fas fa-chart-line',
+            description: '展示数据随时间变化的趋势',
+            charts: []
+        },
+        correlation: {
+            title: '相关性分析',
+            icon: 'fas fa-th',
+            description: '显示变量之间的相关性强度',
+            charts: []
+        },
+        distribution: {
+            title: '数据分布图表',
+            icon: 'fas fa-chart-bar',
+            description: '显示数据的分布形态和频次',
+            charts: []
+        },
+        box_plots: {
+            title: '箱形图分析',
+            icon: 'fas fa-square',
+            description: '显示数据的分布和异常值',
+            charts: []
+        }
+    };
     
-    // 时序图表 - 现在是数组，每个变量一个图表
+    // 时序图表
     if (visualizations.time_series && Array.isArray(visualizations.time_series)) {
         visualizations.time_series.forEach((chart, index) => {
             if (!chart.error) {
-                vizItems.push({
+                chartGroups.time_series.charts.push({
                     id: `time-series-chart-${index}`,
                     title: chart.title || `时间序列趋势图 ${index + 1}`,
-                    data: chart,
-                    description: '展示数据随时间变化的趋势'
+                    data: chart
                 });
             }
         });
@@ -312,11 +441,10 @@ function displayVisualizations(visualizations) {
     
     // 相关性热力图
     if (visualizations.correlation_heatmap && !visualizations.correlation_heatmap.error) {
-        vizItems.push({
+        chartGroups.correlation.charts.push({
             id: 'correlation-heatmap',
             title: '变量相关性热力图',
-            data: visualizations.correlation_heatmap,
-            description: '显示变量之间的相关性强度'
+            data: visualizations.correlation_heatmap
         });
     }
     
@@ -324,11 +452,10 @@ function displayVisualizations(visualizations) {
     if (visualizations.distributions && Array.isArray(visualizations.distributions)) {
         visualizations.distributions.forEach((chart, index) => {
             if (!chart.error) {
-                vizItems.push({
+                chartGroups.distribution.charts.push({
                     id: `distribution-chart-${index}`,
-                    title: `数据分布直方图 ${index + 1}`,
-                    data: chart,
-                    description: '显示数据的分布形态和频次'
+                    title: chart.title || `数据分布直方图 ${index + 1}`,
+                    data: chart
                 });
             }
         });
@@ -338,17 +465,18 @@ function displayVisualizations(visualizations) {
     if (visualizations.box_plots && Array.isArray(visualizations.box_plots)) {
         visualizations.box_plots.forEach((chart, index) => {
             if (!chart.error) {
-                vizItems.push({
+                chartGroups.box_plots.charts.push({
                     id: `box-plot-${index}`,
-                    title: `箱形图 ${index + 1}`,
-                    data: chart,
-                    description: '显示数据的分布和异常值'
+                    title: chart.title || `箱形图 ${index + 1}`,
+                    data: chart
                 });
             }
         });
     }
     
-    if (vizItems.length === 0) {
+    // 检查是否有图表数据
+    const hasCharts = Object.values(chartGroups).some(group => group.charts.length > 0);
+    if (!hasCharts) {
         elements.visualizations.innerHTML = `
             <h3><i class="fas fa-chart-line"></i> 数据可视化</h3>
             <div class="viz-item">
@@ -358,40 +486,66 @@ function displayVisualizations(visualizations) {
         return;
     }
     
-    // 生成可视化网格
-    const vizGrid = vizItems.map(item => `
-        <div class="viz-item">
-            <div class="viz-header">
-                <h4><i class="fas fa-chart-bar"></i> ${item.title}</h4>
-                <div class="viz-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="downloadChart('${item.id}')">
-                        <i class="fas fa-download"></i> 下载
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="fullscreenChart('${item.id}')">
-                        <i class="fas fa-expand"></i> 全屏
-                    </button>
+    // 生成可折叠的图表分组
+    const groupsHtml = Object.entries(chartGroups)
+        .filter(([key, group]) => group.charts.length > 0)
+        .map(([key, group]) => {
+            const chartsHtml = group.charts.map(chart => `
+                <div class="viz-item">
+                    <div class="viz-header">
+                        <h4><i class="fas fa-chart-bar"></i> ${chart.title}</h4>
+                        <div class="viz-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="downloadChart('${chart.id}')">
+                                <i class="fas fa-download"></i> 下载
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="fullscreenChart('${chart.id}')">
+                                <i class="fas fa-expand"></i> 全屏
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="${chart.id}">
+                        <div class="chart-loading">
+                            <i class="fas fa-spinner fa-spin"></i> 正在渲染图表...
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <p class="viz-description">${item.description}</p>
-            <div class="chart-container" id="${item.id}">
-                <div class="chart-loading">
-                    <i class="fas fa-spinner fa-spin"></i> 正在渲染图表...
+            `).join('');
+            
+            return `
+                <div class="chart-group">
+                    <div class="chart-group-header" onclick="toggleChartGroup('${key}')">
+                        <div class="chart-group-title">
+                            <i class="${group.icon}"></i>
+                            <span>${group.title}</span>
+                            <span class="chart-count">(${group.charts.length}个图表)</span>
+                        </div>
+                        <div class="chart-group-toggle">
+                            <i class="fas fa-chevron-down" id="toggle-${key}"></i>
+                        </div>
+                    </div>
+                    <div class="chart-group-description">${group.description}</div>
+                    <div class="chart-group-content collapsed" id="content-${key}">
+                        <div class="viz-grid">
+                            ${chartsHtml}
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-    `).join('');
+            `;
+        }).join('');
     
     elements.visualizations.innerHTML = `
         <h3><i class="fas fa-chart-line"></i> 数据可视化</h3>
-        <div class="viz-grid">
-            ${vizGrid}
+        <div class="chart-groups-container">
+            ${groupsHtml}
         </div>
     `;
     
-    // 渲染Plotly图表
+    // 渲染所有图表（即使在折叠状态下也预先渲染）
     setTimeout(() => {
-        vizItems.forEach(item => {
-            renderPlotlyChart(item.id, item.data);
+        Object.values(chartGroups).forEach(group => {
+            group.charts.forEach(chart => {
+                renderPlotlyChart(chart.id, chart.data);
+            });
         });
     }, 100);
 }
@@ -400,6 +554,24 @@ function displayVisualizations(visualizations) {
 function renderPlotlyChart(containerId, chartData) {
     const container = document.getElementById(containerId);
     if (!container || !chartData) return;
+    
+    // 检查数据是否被压缩（图表数据被移除）
+    if (chartData.compressed || (chartData.image === null && chartData.original_size)) {
+        container.innerHTML = `
+            <div style="text-align: center; color: #f39c12; padding: 40px; background: #fef9e7; border-radius: 8px; border: 1px solid #f1c40f;">
+                <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 15px;"></i>
+                <h4 style="margin: 10px 0; color: #d68910;">图表数据已压缩</h4>
+                <p style="margin: 10px 0; color: #8d6e63;">为了节省存储空间，此图表的可视化数据已被移除。</p>
+                <p style="font-size: 0.9rem; color: #8d6e63;">原始图表大小: ${formatDataSize(chartData.original_size || 0)}</p>
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary btn-sm" onclick="regenerateChart('${containerId}')">
+                        <i class="fas fa-refresh"></i> 重新生成图表
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
     
     try {
         // 配置图表选项
@@ -411,8 +583,8 @@ function renderPlotlyChart(containerId, chartData) {
             toImageButtonOptions: {
                 format: 'png',
                 filename: `chart_${containerId}`,
-                height: 600,
-                width: 1000,
+                height: 400,  // 调整为适配4列布局的尺寸
+                width: 600,   // 调整为适配4列布局的尺寸
                 scale: 2
             }
         };
@@ -493,52 +665,67 @@ function displayDetailedStats(statistics, stationarityTests) {
     }).join('');
     
     elements.detailedStats.innerHTML = `
-        <h3><i class="fas fa-table"></i> 详细统计分析</h3>
-        
-        <!-- 描述性统计 -->
-        <div class="stats-section">
-            <h4>描述性统计</h4>
-            <div class="table-container">
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>变量</th>
-                            <th>计数</th>
-                            <th>均值</th>
-                            <th>中位数</th>
-                            <th>标准差</th>
-                            <th>最小值</th>
-                            <th>最大值</th>
-                            <th>第一四分位数</th>
-                            <th>第三四分位数</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${descriptiveRows}
-                    </tbody>
-                </table>
+        <div class="stats-section-container">
+            <div class="stats-section-header" onclick="toggleStatsSection('detailed-stats')">
+                <div class="stats-section-title">
+                    <i class="fas fa-table"></i>
+                    <span>详细统计分析</span>
+                    <span class="stats-count">(${columns.length}个变量)</span>
+                </div>
+                <div class="stats-section-toggle">
+                    <i class="fas fa-chevron-down" id="toggle-detailed-stats"></i>
+                </div>
             </div>
-        </div>
-        
-        <!-- 高级统计 -->
-        <div class="stats-section">
-            <h4>高级统计分析</h4>
-            <div class="table-container">
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>变量</th>
-                            <th>偏度</th>
-                            <th>峰度</th>
-                            <th>ADF统计量</th>
-                            <th>P值</th>
-                            <th>平稳性</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${advancedRows}
-                    </tbody>
-                </table>
+            <div class="stats-section-description">包含描述性统计、高级统计分析和平稳性检验结果</div>
+            <div class="stats-section-content collapsed" id="content-detailed-stats">
+                <div class="stats-scrollable">
+                    <!-- 描述性统计 -->
+                    <div class="stats-section">
+                        <h4>描述性统计</h4>
+                        <div class="table-container">
+                            <table class="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>变量</th>
+                                        <th>计数</th>
+                                        <th>均值</th>
+                                        <th>中位数</th>
+                                        <th>标准差</th>
+                                        <th>最小值</th>
+                                        <th>最大值</th>
+                                        <th>第一四分位数</th>
+                                        <th>第三四分位数</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${descriptiveRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- 高级统计 -->
+                    <div class="stats-section">
+                        <h4>高级统计分析</h4>
+                        <div class="table-container">
+                            <table class="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>变量</th>
+                                        <th>偏度</th>
+                                        <th>峰度</th>
+                                        <th>ADF统计量</th>
+                                        <th>P值</th>
+                                        <th>平稳性</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${advancedRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -738,5 +925,85 @@ function fullscreenChart(chartId) {
         } else if (element.msRequestFullscreen) {
             element.msRequestFullscreen();
         }
+    }
+}
+
+// 切换图表分组的折叠/展开状态
+function toggleChartGroup(groupKey) {
+    const content = document.getElementById(`content-${groupKey}`);
+    const toggle = document.getElementById(`toggle-${groupKey}`);
+    
+    if (!content || !toggle) return;
+    
+    const isCollapsed = content.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        // 展开
+        content.classList.remove('collapsed');
+        toggle.classList.remove('fa-chevron-down');
+        toggle.classList.add('fa-chevron-up');
+        
+        // 添加展开动画
+        content.style.maxHeight = content.scrollHeight + 'px';
+        
+        // 动画完成后移除maxHeight限制
+        setTimeout(() => {
+            content.style.maxHeight = 'none';
+        }, 300);
+    } else {
+        // 折叠
+        content.style.maxHeight = content.scrollHeight + 'px';
+        
+        // 强制重绘
+        content.offsetHeight;
+        
+        content.style.maxHeight = '0';
+        toggle.classList.remove('fa-chevron-up');
+        toggle.classList.add('fa-chevron-down');
+        
+        // 动画完成后添加collapsed类
+        setTimeout(() => {
+            content.classList.add('collapsed');
+        }, 300);
+    }
+}
+
+// 切换统计部分的折叠/展开状态
+function toggleStatsSection(sectionKey) {
+    const content = document.getElementById(`content-${sectionKey}`);
+    const toggle = document.getElementById(`toggle-${sectionKey}`);
+    
+    if (!content || !toggle) return;
+    
+    const isCollapsed = content.classList.contains('collapsed');
+    
+    if (isCollapsed) {
+        // 展开
+        content.classList.remove('collapsed');
+        toggle.classList.remove('fa-chevron-down');
+        toggle.classList.add('fa-chevron-up');
+        
+        // 添加展开动画
+        content.style.maxHeight = content.scrollHeight + 'px';
+        
+        // 动画完成后移除maxHeight限制
+        setTimeout(() => {
+            content.style.maxHeight = 'none';
+        }, 300);
+    } else {
+        // 折叠
+        content.style.maxHeight = content.scrollHeight + 'px';
+        
+        // 强制重绘
+        content.offsetHeight;
+        
+        content.style.maxHeight = '0';
+        toggle.classList.remove('fa-chevron-up');
+        toggle.classList.add('fa-chevron-down');
+        
+        // 动画完成后添加collapsed类
+        setTimeout(() => {
+            content.classList.add('collapsed');
+        }, 300);
     }
 }

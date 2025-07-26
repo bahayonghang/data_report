@@ -241,15 +241,18 @@ async function uploadAndAnalyze(file) {
         if (data.success) {
             updateProgress(100, '分析完成!');
             setTimeout(() => {
-                // 分析成功，将数据存储到sessionStorage并打开新页面
-                sessionStorage.setItem('analysisData', JSON.stringify(data));
-                
-                // 打开新的分析结果页面
-                const analysisWindow = window.open('/analysis', '_blank');
-                
-                // 如果无法打开新窗口，则在当前页面跳转
-                if (!analysisWindow) {
-                    window.location.href = '/analysis';
+                // 分析成功，安全存储数据到sessionStorage并打开新页面
+                if (safeStoreAnalysisData(data)) {
+                    // 打开新的分析结果页面
+                    const analysisWindow = window.open('/analysis', '_blank');
+                    
+                    // 如果无法打开新窗口，则在当前页面跳转
+                    if (!analysisWindow) {
+                        window.location.href = '/analysis';
+                    }
+                } else {
+                    // 存储失败，显示错误信息
+                    showError('数据存储失败', '分析结果数据过大，无法在浏览器中存储。请尝试分析较小的数据文件。');
                 }
                 
                 hideProgress();
@@ -445,6 +448,101 @@ function displayStatsSummary(statistics, missingValues) {
 }
 
 // ====== 工具函数 ======
+
+/**
+ * 安全存储分析数据到sessionStorage
+ * @param {Object} data - 要存储的分析数据
+ * @returns {boolean} - 存储是否成功
+ */
+function safeStoreAnalysisData(data) {
+    try {
+        const dataString = JSON.stringify(data);
+        const dataSizeKB = new Blob([dataString]).size / 1024;
+        
+        // 检查数据大小（sessionStorage通常限制为5-10MB）
+        const maxSizeKB = 4 * 1024; // 4MB安全限制
+        
+        if (dataSizeKB > maxSizeKB) {
+            console.warn(`数据过大 (${dataSizeKB.toFixed(2)}KB > ${maxSizeKB}KB)，尝试压缩数据`);
+            
+            // 尝试压缩数据：移除可视化图表的base64数据，只保留元数据
+            const compressedData = compressAnalysisData(data);
+            const compressedString = JSON.stringify(compressedData);
+            const compressedSizeKB = new Blob([compressedString]).size / 1024;
+            
+            if (compressedSizeKB > maxSizeKB) {
+                console.error(`压缩后数据仍然过大 (${compressedSizeKB.toFixed(2)}KB > ${maxSizeKB}KB)`);
+                return false;
+            }
+            
+            sessionStorage.setItem('analysisData', compressedString);
+            console.info(`数据已压缩存储 (${compressedSizeKB.toFixed(2)}KB)`);
+        } else {
+            sessionStorage.setItem('analysisData', dataString);
+            console.info(`数据已存储 (${dataSizeKB.toFixed(2)}KB)`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('存储分析数据失败:', error);
+        
+        // 如果是配额超限错误，尝试清理旧数据后重试
+        if (error.name === 'QuotaExceededError') {
+            try {
+                // 清理可能的旧数据
+                sessionStorage.removeItem('analysisData');
+                sessionStorage.removeItem('analysisError');
+                
+                // 重试存储压缩数据
+                const compressedData = compressAnalysisData(data);
+                sessionStorage.setItem('analysisData', JSON.stringify(compressedData));
+                console.info('清理旧数据后重新存储成功');
+                return true;
+            } catch (retryError) {
+                console.error('重试存储失败:', retryError);
+                return false;
+            }
+        }
+        
+        return false;
+    }
+}
+
+/**
+ * 压缩分析数据，移除大型可视化数据
+ * @param {Object} data - 原始分析数据
+ * @returns {Object} - 压缩后的数据
+ */
+function compressAnalysisData(data) {
+    const compressed = JSON.parse(JSON.stringify(data)); // 深拷贝
+    
+    // 如果有可视化数据，移除base64图片数据，只保留元数据
+    if (compressed.data && compressed.data.visualizations) {
+        const viz = compressed.data.visualizations;
+        
+        // 处理各种图表类型
+        ['time_series', 'correlation_heatmap', 'distribution_plots', 'box_plots'].forEach(chartType => {
+            if (viz[chartType] && viz[chartType].image) {
+                // 保留图表元数据，移除base64数据
+                viz[chartType] = {
+                    ...viz[chartType],
+                    image: null, // 移除图片数据
+                    compressed: true, // 标记为已压缩
+                    original_size: viz[chartType].image ? viz[chartType].image.length : 0
+                };
+            }
+        });
+    }
+    
+    // 标记数据已被压缩
+    compressed.compressed = true;
+    compressed.compression_info = {
+        timestamp: new Date().toISOString(),
+        removed_visualizations: true
+    };
+    
+    return compressed;
+}
 
 // 格式化文件大小
 function formatFileSize(bytes) {
@@ -733,12 +831,14 @@ async function viewHistoryResult(historyId) {
         const data = await response.json();
         
         if (data.success) {
-            // 将历史数据存储到sessionStorage并打开分析页面
-            sessionStorage.setItem('analysisData', JSON.stringify(data));
-            
-            const analysisWindow = window.open('/analysis', '_blank');
-            if (!analysisWindow) {
-                window.location.href = '/analysis';
+            // 安全存储历史数据到sessionStorage并打开分析页面
+            if (safeStoreAnalysisData(data)) {
+                const analysisWindow = window.open('/analysis', '_blank');
+                if (!analysisWindow) {
+                    window.location.href = '/analysis';
+                }
+            } else {
+                showError('数据存储失败', '历史记录数据过大，无法在浏览器中存储。');
             }
         } else {
             throw new Error(data.error?.message || '获取历史记录失败');
@@ -756,12 +856,14 @@ async function viewAnalysisResult(analysisId) {
         const data = await response.json();
         
         if (data.success) {
-            // 将分析数据存储到sessionStorage并打开分析页面
-            sessionStorage.setItem('analysisData', JSON.stringify(data));
-            
-            const analysisWindow = window.open('/analysis', '_blank');
-            if (!analysisWindow) {
-                window.location.href = '/analysis';
+            // 安全存储分析数据到sessionStorage并打开分析页面
+            if (safeStoreAnalysisData(data)) {
+                const analysisWindow = window.open('/analysis', '_blank');
+                if (!analysisWindow) {
+                    window.location.href = '/analysis';
+                }
+            } else {
+                showError('数据存储失败', '分析结果数据过大，无法在浏览器中存储。');
             }
         } else {
             throw new Error(data.message || '获取分析结果失败');
@@ -1022,8 +1124,8 @@ function renderPlotlyChart(containerId, chartData) {
             toImageButtonOptions: {
                 format: 'png',
                 filename: `chart_${containerId}`,
-                height: 600,
-                width: 1000,
+                height: 500,  // 调整为适配2列布局的尺寸
+                width: 800,   // 调整为适配2列布局的尺寸
                 scale: 2
             }
         };
@@ -1187,8 +1289,8 @@ function downloadChart(chartId) {
     // 使用Plotly的下载功能
     Plotly.downloadImage(chartId, {
         format: 'png',
-        width: 1200,
-        height: 800,
+        width: 800,   // 调整为适配2列布局的尺寸
+        height: 500,  // 调整为适配2列布局的尺寸
         filename: `chart_${chartId}_${new Date().toISOString().split('T')[0]}`
     }).catch(error => {
         console.error('Download failed:', error);
