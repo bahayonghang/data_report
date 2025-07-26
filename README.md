@@ -11,7 +11,7 @@
   <img src="image/README/网页截图.png" width="600" alt="Web Interface Screenshot">
 </div>
 
-A web-based, automated data analysis and reporting tool designed for time-series data. It provides an intuitive web interface to upload data files (CSV/Parquet), and automatically generates a comprehensive report with statistical analysis and rich, interactive visualizations.
+A web-based, automated data analysis and reporting tool designed for time-series data. It provides an intuitive web interface to upload data files (CSV/Parquet), and automatically generates a comprehensive report with statistical analysis and rich, interactive visualizations. [Suitable for smaller datasets (<100MB)]
 
 ## 🚀 Key Features
 
