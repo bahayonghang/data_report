@@ -147,6 +147,7 @@ class DataChunkProcessor:
             return self.create_row_based_chunks(df)
         
         try:
+            import polars as pl
             # 确保时间列是datetime类型
             if df[time_column].dtype != pl.Datetime:
                 df = df.with_columns(pl.col(time_column).str.to_datetime())
@@ -174,12 +175,34 @@ class DataChunkProcessor:
                         chunk_time_min = chunk_df[time_column].min()
                         chunk_time_max = chunk_df[time_column].max()
                         
-                        # 转换为Python datetime对象（如果可能）
+                        # 使用polars转换为Python datetime对象
                         if chunk_time_min is not None and chunk_time_max is not None:
                             try:
-                                import pandas as pd
-                                time_start = pd.to_datetime(str(chunk_time_min)).to_pydatetime()
-                                time_end = pd.to_datetime(str(chunk_time_max)).to_pydatetime()
+                                import polars as pl
+                                
+                                # 将polars时间值转换为Python datetime对象
+                                # 如果是字符串，先转换为datetime类型
+                                if isinstance(chunk_time_min, str):
+                                    time_start_pl = pl.Series([chunk_time_min]).str.to_datetime().item()
+                                else:
+                                    time_start_pl = chunk_time_min
+                                    
+                                if isinstance(chunk_time_max, str):
+                                    time_end_pl = pl.Series([chunk_time_max]).str.to_datetime().item()
+                                else:
+                                    time_end_pl = chunk_time_max
+                                
+                                # 转换为Python datetime对象
+                                if hasattr(time_start_pl, 'to_pydatetime'):
+                                    time_start = time_start_pl.to_pydatetime()
+                                else:
+                                    time_start = time_start_pl
+                                    
+                                if hasattr(time_end_pl, 'to_pydatetime'):
+                                    time_end = time_end_pl.to_pydatetime()
+                                else:
+                                    time_end = time_end_pl
+                                
                                 chunk.time_column = time_column
                                 chunk.time_range = (time_start, time_end)
                             except Exception:

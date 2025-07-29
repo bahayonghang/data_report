@@ -234,15 +234,21 @@ def _sample_data_for_visualization(df: pl.DataFrame, max_points: int = MAX_POINT
             return df
         
         # 计算采样步长
-        step = df.height // max_points
+        step = max(1, df.height // max_points)
         logger.info(f"数据量过大({df.height}行)，采样每{step}行用于可视化")
         
-        # 使用等间隔采样
-        sampled_df = df.slice(0, max_points).filter(pl.int_range(pl.len()) % step == 0)
+        # 使用简单的等间隔采样
+        sampled_df = df.slice(0, df.height, step)
+        
+        # 如果采样结果太少，确保至少有一些数据
+        if sampled_df.height < min(100, max_points // 10):
+            sampled_df = df.head(max_points)
+            
+        logger.info(f"采样完成，从{df.height}行采样到{sampled_df.height}行")
         return sampled_df
     except Exception as e:
-        logger.warning(f"数据采样失败: {e}，使用原始数据")
-        return df
+        logger.warning(f"数据采样失败: {e}，使用前{max_points}行数据")
+        return df.head(max_points)
 
 
 @monitor_performance
@@ -284,10 +290,19 @@ def create_time_series_plot(
         time_data = sampled_df[time_col].to_list()
         colors = get_color_sequence(len(valid_cols))
         
+        # 调试信息：检查时间数据
+        logger.info(f"时间数据样本: {time_data[:5] if len(time_data) > 0 else '空'}")
+        logger.info(f"时间数据类型: {type(time_data[0]) if len(time_data) > 0 else '无'}")
+        logger.info(f"采样后数据行数: {sampled_df.height}")
+        
         # 为每个数值列创建单独的图表
         for i, col in enumerate(valid_cols):
             try:
                 y_data = sampled_df[col].to_list()
+                
+                # 调试信息：检查数值数据
+                logger.info(f"列 '{col}' 数据样本: {y_data[:5] if len(y_data) > 0 else '空'}")
+                logger.info(f"列 '{col}' 非空值数量: {sum(1 for val in y_data if val is not None)}")
                 
                 # 检查数据有效性
                 if not y_data or all(val is None for val in y_data):

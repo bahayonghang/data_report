@@ -133,7 +133,7 @@ def resample_time_series(
 ) -> pl.DataFrame:
     """时间序列重采样
     
-    使用pandas风格的重采样来降低数据密度。
+    使用polars的group_by_dynamic进行高效的时间序列重采样。
     
     Args:
         df: 数据框
@@ -145,31 +145,61 @@ def resample_time_series(
         pl.DataFrame: 重采样后的数据框
     """
     try:
-        # 转换为pandas进行重采样（polars的重采样功能有限）
-        import pandas as pd
+        import polars as pl
         
-        # 转换为pandas
-        pdf = df.to_pandas()
-        pdf[time_col] = pd.to_datetime(pdf[time_col])
-        pdf = pdf.set_index(time_col)
-        
-        # 重采样
-        if agg_method == "mean":
-            resampled = pdf.resample(freq).mean()
-        elif agg_method == "max":
-            resampled = pdf.resample(freq).max()
-        elif agg_method == "min":
-            resampled = pdf.resample(freq).min()
-        elif agg_method == "sum":
-            resampled = pdf.resample(freq).sum()
+        # 确保时间列是datetime类型
+        if df[time_col].dtype == pl.Datetime:
+            # 如果已经是datetime类型，直接使用
+            df_with_time = df
+        elif df[time_col].dtype == pl.Date:
+            # 如果是date类型，转换为datetime
+            df_with_time = df.with_columns(
+                pl.col(time_col).cast(pl.Datetime).alias(time_col)
+            )
         else:
-            resampled = pdf.resample(freq).mean()
+            # 如果是字符串类型，转换为datetime
+            df_with_time = df.with_columns(
+                pl.col(time_col).str.to_datetime(strict=False).alias(time_col)
+            )
         
-        # 重置索引并转换回polars
-        resampled = resampled.reset_index().dropna()
+        # 过滤掉时间列中的空值，group_by_dynamic不支持空值
+        df_filtered = df_with_time.filter(pl.col(time_col).is_not_null())
         
-        # 转换回polars
-        result_df = pl.from_pandas(resampled)
+        # 按时间列排序，group_by_dynamic要求数据按时间排序
+        df_sorted = df_filtered.sort(time_col)
+        
+        # 获取除时间列外的所有数值列
+        numeric_cols = [col for col in df_sorted.columns 
+                       if col != time_col and df_sorted[col].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8]]
+        
+        # 根据聚合方法选择相应的polars表达式
+        if agg_method == "mean":
+            agg_exprs = [pl.col(col).mean().alias(col) for col in numeric_cols]
+        elif agg_method == "max":
+            agg_exprs = [pl.col(col).max().alias(col) for col in numeric_cols]
+        elif agg_method == "min":
+            agg_exprs = [pl.col(col).min().alias(col) for col in numeric_cols]
+        elif agg_method == "sum":
+            agg_exprs = [pl.col(col).sum().alias(col) for col in numeric_cols]
+        else:
+            # 默认使用mean
+            agg_exprs = [pl.col(col).mean().alias(col) for col in numeric_cols]
+        
+        # 使用group_by_dynamic进行重采样
+        # 注意：polars的频率格式与pandas略有不同
+        # 将pandas格式转换为polars格式
+        polars_freq = _convert_freq_to_polars(freq)
+        
+        result_df = df_sorted.group_by_dynamic(
+            index_column=time_col,
+            every=polars_freq,
+            closed="left"  # 左闭右开区间，与pandas默认行为一致
+        ).agg(agg_exprs)
+        
+        # 过滤掉空的时间窗口（所有值都是null的行）
+        result_df = result_df.filter(
+            pl.any_horizontal([pl.col(col).is_not_null() for col in numeric_cols])
+        )
         
         logger.info(f"重采样完成：从 {len(df)} 行降至 {len(result_df)} 行")
         return result_df
@@ -177,6 +207,44 @@ def resample_time_series(
     except Exception as e:
         logger.warning(f"重采样失败: {e}，返回原始数据")
         return df
+
+
+def _convert_freq_to_polars(pandas_freq: str) -> str:
+    """将pandas频率格式转换为polars格式
+    
+    Args:
+        pandas_freq: pandas风格的频率字符串 (如 '1h', '1d', '1w')
+        
+    Returns:
+        str: polars风格的频率字符串
+    """
+    # polars和pandas的频率格式基本相同，但有一些细微差别
+    freq_mapping = {
+        'h': 'h',    # 小时
+        'd': 'd',    # 天
+        'w': 'w',    # 周
+        'm': 'mo',   # 月份（polars使用'mo'而不是'm'）
+        'y': 'y',    # 年
+        's': 's',    # 秒
+        'min': 'm',  # 分钟（polars使用'm'表示分钟）
+        'ms': 'ms',  # 毫秒
+        'us': 'us',  # 微秒
+        'ns': 'ns'   # 纳秒
+    }
+    
+    # 解析频率字符串
+    import re
+    match = re.match(r'(\d*)([a-zA-Z]+)', pandas_freq)
+    if match:
+        number, unit = match.groups()
+        number = number or '1'  # 如果没有数字，默认为1
+        
+        # 转换单位
+        polars_unit = freq_mapping.get(unit, unit)
+        return f"{number}{polars_unit}"
+    
+    # 如果解析失败，返回原始字符串
+    return pandas_freq
 
 
 def adaptive_sampling_strategy(

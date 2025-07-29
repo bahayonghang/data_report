@@ -61,12 +61,14 @@ def calculate_time_range(time_series: pl.Series) -> Dict[str, Any]:
 
     # 计算持续时间（天数）
     try:
-        # 转换为pandas进行计算
-        import pandas as pd
-        # 将 Polars 数据转换为 pandas 兼容格式
-        start_pd = pd.to_datetime(str(start_time))
-        end_pd = pd.to_datetime(str(end_time))
-        duration_days = (end_pd - start_pd).days
+        # 使用polars进行时间计算
+        # 将时间值转换为polars datetime类型
+        start_pl = pl.Series([str(start_time)]).str.to_datetime().item()
+        end_pl = pl.Series([str(end_time)]).str.to_datetime().item()
+        
+        # 计算时间差并转换为天数
+        duration_pl = end_pl - start_pl
+        duration_days = duration_pl.total_days() if hasattr(duration_pl, 'total_days') else 0
     except Exception:
         duration_days = 0
 
@@ -74,13 +76,17 @@ def calculate_time_range(time_series: pl.Series) -> Dict[str, Any]:
     if len(sorted_series) > 1:
         # 计算连续时间点的平均间隔
         diffs = []
-        # 使用pandas计算时间差以提高性能
+        # 使用polars计算时间差以提高性能
         try:
-            import pandas as pd
-            # 转换为pandas进行差分计算
-            pd_series = sorted_series.to_pandas()
-            time_diffs = pd_series.diff().dt.days.dropna()
-            diffs = time_diffs.tolist()
+            # 使用polars进行差分计算
+            # 确保时间列是datetime类型
+            if sorted_series.dtype != pl.Datetime:
+                sorted_series = sorted_series.str.to_datetime()
+            
+            # 计算时间差分（天数）
+            time_diffs = sorted_series.diff().dt.total_days()
+            # 过滤掉null值并转换为列表
+            diffs = time_diffs.drop_nulls().to_list()
         except Exception:
             # 降级到简单采样计算
             diffs = []
@@ -88,10 +94,10 @@ def calculate_time_range(time_series: pl.Series) -> Dict[str, Any]:
             step = max(1, len(sorted_series) // sample_size)
             for i in range(step, len(sorted_series), step):
                 try:
-                    import pandas as pd
-                    t1 = pd.to_datetime(sorted_series[i-step])
-                    t2 = pd.to_datetime(sorted_series[i])
-                    diff_days = (t2 - t1).days
+                    # 使用polars进行时间转换和计算
+                    t1 = pl.Series([str(sorted_series[i-step])]).str.to_datetime().item()
+                    t2 = pl.Series([str(sorted_series[i])]).str.to_datetime().item()
+                    diff_days = (t2 - t1).total_days()
                     diffs.append(diff_days)
                 except Exception:
                     continue
@@ -120,10 +126,10 @@ def calculate_time_range(time_series: pl.Series) -> Dict[str, Any]:
         
         for i in range(step, len(sorted_series), step):
             try:
-                import pandas as pd
-                t1 = pd.to_datetime(sorted_series[i-step])
-                t2 = pd.to_datetime(sorted_series[i])
-                gap_days = (t2 - t1).days
+                # 使用polars进行时间转换和计算
+                t1 = pl.Series([str(sorted_series[i-step])]).str.to_datetime().item()
+                t2 = pl.Series([str(sorted_series[i])]).str.to_datetime().item()
+                gap_days = (t2 - t1).total_days()
                 if gap_days > step:  # 考虑步长的gap
                     gaps.append(
                         {

@@ -204,20 +204,48 @@ def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[s
     # 数据预处理优化：使用lazy evaluation
     processed_df = df.lazy()
 
-    # 转换时间列为 datetime 类型（优化版本）
+    # 转换时间列为 datetime 类型（修复版本）
     if time_column:
         col_dtype = df[time_column].dtype
         if col_dtype == pl.Utf8:
             try:
-                # 批量尝试多种格式
-                processed_df = processed_df.with_columns(
-                    pl.col(time_column)
-                    .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S%.f", strict=False)
-                    .str.strptime(pl.Datetime, format="%Y-%m-%d %H:%M:%S", strict=False)
-                    .str.strptime(pl.Datetime, format="%Y-%m-%d", strict=False)
-                    .str.strptime(pl.Datetime, format="%Y/%m/%d", strict=False)
-                    .alias(time_column)
-                )
+                # 逐个尝试不同格式，而不是链式调用
+                time_formats = [
+                    "%Y-%m-%d %H:%M:%S%.f",
+                    "%Y-%m-%d %H:%M:%S", 
+                    "%Y-%m-%d",
+                    "%Y/%m/%d %H:%M:%S",
+                    "%Y/%m/%d",
+                    "%m/%d/%Y %H:%M:%S",
+                    "%m/%d/%Y",
+                    "%d/%m/%Y %H:%M:%S",
+                    "%d/%m/%Y"
+                ]
+                
+                converted_col = None
+                for fmt in time_formats:
+                    try:
+                        # 尝试当前格式
+                        test_conversion = processed_df.with_columns(
+                            pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
+                        ).collect()
+                        
+                        # 检查转换结果是否有效（非全部为null）
+                        non_null_count = test_conversion[time_column].drop_nulls().len()
+                        if non_null_count > 0:
+                            logging.info(f"时间列 '{time_column}' 使用格式 '{fmt}' 成功转换，有效值: {non_null_count}")
+                            processed_df = processed_df.with_columns(
+                                pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
+                            )
+                            converted_col = time_column
+                            break
+                    except Exception:
+                        continue
+                
+                if converted_col is None:
+                    warnings_list.append(f"时间列 '{time_column}' 无法转换为日期时间格式，将作为普通列处理")
+                    time_column = None
+                    
             except Exception as e:
                 warnings_list.append(f"时间列 '{time_column}' 转换失败: {str(e)}")
                 time_column = None

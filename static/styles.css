@@ -538,55 +538,22 @@ h3 {
 
 .viz-grid {
     display: grid;
-    /* 响应式网格布局 - 基于React Grid Layout最佳实践 */
-    grid-template-columns: repeat(4, 1fr); /* 大屏幕(≥1600px): 4列，充分利用扩展的宽度 */
-    gap: 20px;
+    /* 修改为一行一个图表的布局 */
+    grid-template-columns: 1fr; /* 所有屏幕尺寸都使用单列布局 */
+    gap: 30px;
     margin-top: 20px;
-    /* 减小图表高度以适应更多列的布局 */
-    grid-auto-rows: minmax(300px, auto);
+    /* 增加图表高度以适应单列布局 */
+    grid-auto-rows: minmax(400px, auto);
     padding: 20px;
 }
 
-/* 中等屏幕断点 (1200px - 1599px) */
-@media (max-width: 1599px) and (min-width: 1200px) {
+/* 移除响应式断点，统一使用单列布局 */
+/* 小屏幕优化 */
+@media (max-width: 768px) {
     .viz-grid {
-        grid-template-columns: repeat(3, 1fr); /* 中大屏: 3列 */
         gap: 20px;
-    }
-}
-
-/* 中等屏幕断点 (996px - 1199px) */
-@media (max-width: 1199px) {
-    .viz-grid {
-        grid-template-columns: repeat(2, 1fr); /* 中屏: 2列 */
-        gap: 20px;
-    }
-}
-
-/* 小屏幕断点 (768px - 995px) */
-@media (max-width: 995px) {
-    .viz-grid {
-        grid-template-columns: repeat(2, 1fr); /* 小屏: 2列 */
-        gap: 18px;
-        grid-auto-rows: minmax(280px, auto); /* 小屏幕也减小高度 */
-    }
-    
-    .viz-item {
-        padding: 18px;
-    }
-    
-    .chart-container {
-        min-height: 260px; /* 小屏幕进一步减小高度 */
-    }
-}
-
-/* 超小屏幕断点 (480px - 767px) */
-@media (max-width: 767px) {
-    .viz-grid {
-        grid-template-columns: 1fr; /* 超小屏: 1列 */
-        gap: 15px;
-        grid-auto-rows: minmax(280px, auto);
         padding: 15px;
+        grid-auto-rows: minmax(350px, auto);
     }
     
     .viz-item {
@@ -594,8 +561,9 @@ h3 {
     }
     
     .chart-container {
-        min-height: 280px;
+        min-height: 320px;
     }
+}
     
     .chart-group-header {
         padding: 12px 16px;
