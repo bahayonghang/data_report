@@ -147,6 +147,27 @@ def resample_time_series(
     try:
         import polars as pl
         
+        # 检查数据有效性
+        if df.height == 0:
+            logger.warning("输入数据为空")
+            return df
+            
+        if time_col not in df.columns:
+            logger.warning(f"时间列 '{time_col}' 不存在")
+            return df
+            
+        # 检查时间列是否全部为空
+        if df[time_col].is_null().all():
+            logger.warning(f"时间列 '{time_col}' 全部为空")
+            return df
+            
+        # 计算有效时间数据的比例
+        valid_time_count = df[time_col].is_not_null().sum()
+        valid_time_ratio = valid_time_count / len(df)
+        if valid_time_ratio < 0.1:  # 如果有效时间数据少于10%
+            logger.warning(f"时间列 '{time_col}' 有效数据比例过低: {valid_time_ratio:.2%}")
+            return df
+        
         # 确保时间列是datetime类型
         if df[time_col].dtype == pl.Datetime:
             # 如果已经是datetime类型，直接使用
@@ -165,12 +186,25 @@ def resample_time_series(
         # 过滤掉时间列中的空值，group_by_dynamic不支持空值
         df_filtered = df_with_time.filter(pl.col(time_col).is_not_null())
         
+        # 在过滤后检查剩余数据量
+        if df_filtered.height == 0:
+            logger.warning("时间列过滤后无有效数据")
+            return df
+            
+        if df_filtered.height < 2:
+            logger.warning("有效数据点过少，无法进行重采样")
+            return df_filtered
+        
         # 按时间列排序，group_by_dynamic要求数据按时间排序
         df_sorted = df_filtered.sort(time_col)
         
         # 获取除时间列外的所有数值列
         numeric_cols = [col for col in df_sorted.columns 
                        if col != time_col and df_sorted[col].dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int16, pl.Int8]]
+        
+        if not numeric_cols:
+            logger.warning("没有找到数值列进行重采样")
+            return df_sorted
         
         # 根据聚合方法选择相应的polars表达式
         if agg_method == "mean":
@@ -197,9 +231,15 @@ def resample_time_series(
         ).agg(agg_exprs)
         
         # 过滤掉空的时间窗口（所有值都是null的行）
-        result_df = result_df.filter(
-            pl.any_horizontal([pl.col(col).is_not_null() for col in numeric_cols])
-        )
+        if numeric_cols:
+            result_df = result_df.filter(
+                pl.any_horizontal([pl.col(col).is_not_null() for col in numeric_cols])
+            )
+        
+        # 如果重采样后数据为空，返回原始的过滤后数据
+        if result_df.height == 0:
+            logger.warning("重采样后数据为空，返回过滤后的原始数据")
+            return df_filtered
         
         logger.info(f"重采样完成：从 {len(df)} 行降至 {len(result_df)} 行")
         return result_df
@@ -285,6 +325,22 @@ def adaptive_sampling_strategy(
     if time_col and time_col in df.columns:
         # 有时间列，使用智能时间序列采样
         try:
+            # 数据质量检查
+            valid_time_count = df[time_col].is_not_null().sum()
+            valid_time_ratio = valid_time_count / original_size
+            
+            if valid_time_ratio < 0.5:
+                logger.warning(f"时间列 '{time_col}' 有效数据比例过低: {valid_time_ratio:.2%}，跳过时间序列采样")
+                # 降级到简单随机采样
+                sampled_df = df.sample(n=target_size, seed=42)
+                sampling_info.update({
+                    "sampled_size": target_size,
+                    "sampling_method": "random_fallback_low_quality",
+                    "sampling_ratio": target_size / original_size,
+                    "performance_gain": original_size / target_size
+                })
+                return sampled_df, sampling_info
+            
             # 首先尝试重采样（如果数据量非常大）
             if original_size > 50000:
                 logger.info("数据量过大，尝试时间重采样")
@@ -298,7 +354,7 @@ def adaptive_sampling_strategy(
                     freq = "10min"  # 10分钟采样
                 
                 resampled_df = resample_time_series(df, time_col, freq)
-                if len(resampled_df) <= target_size:
+                if len(resampled_df) > 0 and len(resampled_df) <= target_size:
                     sampling_info.update({
                         "sampled_size": len(resampled_df),
                         "sampling_method": f"time_resample_{freq}",
@@ -307,6 +363,8 @@ def adaptive_sampling_strategy(
                     })
                     logger.info(f"重采样成功：{original_size} -> {len(resampled_df)} 行")
                     return resampled_df, sampling_info
+                elif len(resampled_df) == 0:
+                    logger.warning("重采样结果为空，使用智能采样")
             
             # 重采样不够或失败，使用智能采样
             sampled_df = smart_time_series_sample(df, time_col, target_size)
@@ -349,18 +407,45 @@ def adaptive_sampling_strategy(
 def _estimate_time_range_days(df: pl.DataFrame, time_col: str) -> Optional[float]:
     """估算时间范围（天数）"""
     try:
+        # 检查时间列是否存在
+        if time_col not in df.columns:
+            logger.warning(f"时间列 '{time_col}' 不存在")
+            return None
+            
+        # 检查时间列是否全部为空
+        if df[time_col].is_null().all():
+            logger.warning(f"时间列 '{time_col}' 全部为空")
+            return None
+            
+        # 计算有效时间数据的比例
+        valid_time_count = df[time_col].is_not_null().sum()
+        valid_time_ratio = valid_time_count / len(df)
+        if valid_time_ratio < 0.1:  # 如果有效时间数据少于10%
+            logger.warning(f"时间列 '{time_col}' 有效数据比例过低: {valid_time_ratio:.2%}")
+            return None
+        
         # 确保时间列是datetime类型
         if df[time_col].dtype != pl.Datetime:
             df = df.with_columns(pl.col(time_col).cast(pl.Datetime))
         
+        # 过滤掉空值后计算时间范围
+        df_filtered = df.filter(pl.col(time_col).is_not_null())
+        if df_filtered.height == 0:
+            logger.warning("时间列过滤后无有效数据")
+            return None
+        
         # 使用polars表达式计算时间范围
-        result = df.select([
+        result = df_filtered.select([
             (pl.col(time_col).max() - pl.col(time_col).min()).dt.total_days().alias("days_diff")
         ])
         
         days_diff = result["days_diff"][0]
-        if days_diff is not None:
+        if days_diff is not None and days_diff > 0:
             return float(days_diff)
-    except Exception:
-        pass
-    return None
+        else:
+            logger.warning(f"计算得到的时间范围无效: {days_diff}")
+            return None
+            
+    except Exception as e:
+        logger.warning(f"估算时间范围失败: {e}")
+        return None

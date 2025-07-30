@@ -238,7 +238,11 @@ def _sample_data_for_visualization(df: pl.DataFrame, max_points: int = MAX_POINT
         logger.info(f"数据量过大({df.height}行)，采样每{step}行用于可视化")
         
         # 使用简单的等间隔采样
-        sampled_df = df.slice(0, df.height, step)
+        sample_count = min(max_points, (df.height + step - 1) // step)
+        
+        # 生成采样索引
+        indices = list(range(0, df.height, step))[:sample_count]
+        sampled_df = df[indices]
         
         # 如果采样结果太少，确保至少有一些数据
         if sampled_df.height < min(100, max_points // 10):
@@ -326,10 +330,11 @@ def create_time_series_plot(
                 )
                 
                 # 应用主题配置
-                layout = get_chart_theme("time_series", size)
-                layout["title"]["text"] = f"{col} 时间序列趋势"
+                layout = get_chart_theme("time_series", "medium")  # 使用medium尺寸适配2列布局
+                layout["title"]["text"] = f"{col}"  # 简化标题
                 layout["yaxis"]["title"] = col
                 layout["xaxis"]["title"] = "时间"
+                layout["title"]["font"]["size"] = 14  # 减小标题字体
                 
                 # 应用响应式尺寸
                 layout = apply_responsive_sizing(layout, device_type)

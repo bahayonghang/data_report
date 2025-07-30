@@ -538,12 +538,12 @@ h3 {
 
 .viz-grid {
     display: grid;
-    /* 修改为一行一个图表的布局 */
-    grid-template-columns: 1fr; /* 所有屏幕尺寸都使用单列布局 */
-    gap: 30px;
+    /* 修改为一行2个图表的布局 */
+    grid-template-columns: repeat(2, 1fr); /* 桌面端2列布局 */
+    gap: 25px;
     margin-top: 20px;
-    /* 增加图表高度以适应单列布局 */
-    grid-auto-rows: minmax(400px, auto);
+    /* 适配2列布局的图表高度，增大以匹配新的图表尺寸 */
+    grid-auto-rows: minmax(350px, auto);
     padding: 20px;
 }
 
@@ -551,9 +551,10 @@ h3 {
 /* 小屏幕优化 */
 @media (max-width: 768px) {
     .viz-grid {
+        grid-template-columns: 1fr; /* 移动设备上单列显示 */
         gap: 20px;
         padding: 15px;
-        grid-auto-rows: minmax(350px, auto);
+        grid-auto-rows: minmax(280px, auto);
     }
     
     .viz-item {
@@ -561,7 +562,7 @@ h3 {
     }
     
     .chart-container {
-        min-height: 320px;
+        min-height: 280px;
     }
 }
     
@@ -603,8 +604,8 @@ h3 {
 .chart-container {
     background: white;
     border-radius: 8px;
-    padding: 12px; /* 减小内边距 */
-    min-height: 280px; /* 减小最小高度从350px到280px */
+    padding: 12px; /* 增加内边距以适配更大的图表 */
+    min-height: 300px; /* 增加最小高度以适配更大的图表 */
     position: relative;
 }
 
@@ -879,18 +880,12 @@ h3 {
         grid-template-columns: 1fr 1fr;
     }
     
-    .viz-grid {
-        grid-template-columns: 1fr; /* 移动设备上单列显示 */
-        gap: 15px;
-        grid-auto-rows: minmax(300px, auto); /* 移动设备上减小最小高度 */
-    }
-    
     .viz-item {
         padding: 15px;
     }
     
     .chart-container {
-        min-height: 300px;
+        min-height: 280px; /* 移动端使用稍小的高度 */
     }
     
     .modal-content {

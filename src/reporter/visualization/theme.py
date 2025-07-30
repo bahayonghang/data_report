@@ -34,15 +34,15 @@ BASE_LAYOUT_CONFIG = {
     "font": FONT_CONFIG,
     "plot_bgcolor": COLOR_PALETTE["background"],
     "paper_bgcolor": COLOR_PALETTE["background"],
-    "margin": {"l": 60, "r": 50, "t": 80, "b": 60},
+    "margin": {"l": 60, "r": 60, "t": 70, "b": 50},  # 增加边距以适配更大的图表
     "showlegend": True,
     "legend": {
-        "orientation": "v",
+        "orientation": "h",  # 改为水平布局
         "yanchor": "top",
-        "y": 1,
-        "xanchor": "left",
-        "x": 1.02,
-        "font": FONT_CONFIG,
+        "y": 1.02,  # 移到图表上方
+        "xanchor": "center",
+        "x": 0.5,  # 水平居中
+        "font": {"family": "Arial, sans-serif", "size": 11, "color": COLOR_PALETTE["text"]},
     },
 }
 
@@ -61,8 +61,8 @@ AXIS_CONFIG = {
 # 针对2列布局优化的尺寸设置
 RESPONSIVE_CONFIG = {
     "small": {"width": 350, "height": 250},  # 移动端单列布局
-    "medium": {"width": 450, "height": 300},  # 桌面端2列布局
-    "large": {"width": 800, "height": 500},   # 特殊大图
+    "medium": {"width": 450, "height": 320},  # 桌面端2列布局，放大尺寸
+    "large": {"width": 700, "height": 450},   # 特殊大图，放大尺寸
     "dashboard": {"width": 1200, "height": 800},  # 仪表板
 }
 
@@ -98,6 +98,11 @@ def get_chart_theme(
     if chart_type == "time_series":
         layout["hovermode"] = "x unified"
         layout["xaxis"]["type"] = "date"
+        # 时间序列图表特定配置
+        layout["legend"]["y"] = -0.15  # 将图例移到图表下方
+        layout["legend"]["x"] = 0.5
+        layout["legend"]["yanchor"] = "top"
+        layout["margin"]["b"] = 50  # 增加底部边距容纳图例
 
     elif chart_type == "heatmap":
         layout["xaxis"]["showgrid"] = False
@@ -170,28 +175,12 @@ def enhance_interactivity(fig_dict: Dict) -> Dict:
 
     fig_dict["config"].update(INTERACTION_CONFIG)
 
-    # 为时序图添加范围选择器
+    # 为时序图添加范围选择器（已禁用，移除底部控件）
     if "layout" in fig_dict and "xaxis" in fig_dict["layout"]:
         if fig_dict["layout"]["xaxis"].get("type") == "date":
-            fig_dict["layout"]["xaxis"]["rangeslider"] = {"visible": True}
-            fig_dict["layout"]["xaxis"]["rangeselector"] = {
-                "buttons": [
-                    {"count": 7, "label": "7天", "step": "day", "stepmode": "backward"},
-                    {
-                        "count": 30,
-                        "label": "30天",
-                        "step": "day",
-                        "stepmode": "backward",
-                    },
-                    {
-                        "count": 90,
-                        "label": "90天",
-                        "step": "day",
-                        "stepmode": "backward",
-                    },
-                    {"step": "all", "label": "全部"},
-                ]
-            }
+            # 禁用范围滑块和选择器，移除图表底部控件
+            fig_dict["layout"]["xaxis"]["rangeslider"] = {"visible": False}
+            fig_dict["layout"]["xaxis"]["rangeselector"] = {"visible": False}
 
     return fig_dict
 

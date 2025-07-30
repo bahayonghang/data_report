@@ -47,12 +47,14 @@ def load_data_file(file_path: str, max_rows: int = 1000000) -> pl.DataFrame:
     try:
         if suffix == ".csv":
             # 使用流式读取处理大文件
+            # 注意：禁用自动日期解析，因为可能会错误地处理带前导空格的时间格式
+            # 时间列的转换将在 prepare_analysis_data 函数中处理
             return pl.read_csv(
                 file_path,
                 low_memory=True,
                 n_rows=max_rows if file_size > 50 * 1024 * 1024 else None,  # 50MB以上限制行数
                 ignore_errors=True,
-                try_parse_dates=True
+                try_parse_dates=False  # 禁用自动日期解析
             )
         elif suffix == ".parquet":
             # Parquet文件通常更高效，使用内存映射
@@ -209,42 +211,101 @@ def prepare_analysis_data(df: pl.DataFrame, sample_size: int = 100000) -> Dict[s
         col_dtype = df[time_column].dtype
         if col_dtype == pl.Utf8:
             try:
-                # 逐个尝试不同格式，而不是链式调用
-                time_formats = [
-                    "%Y-%m-%d %H:%M:%S%.f",
-                    "%Y-%m-%d %H:%M:%S", 
-                    "%Y-%m-%d",
-                    "%Y/%m/%d %H:%M:%S",
-                    "%Y/%m/%d",
-                    "%m/%d/%Y %H:%M:%S",
-                    "%m/%d/%Y",
-                    "%d/%m/%Y %H:%M:%S",
-                    "%d/%m/%Y"
-                ]
+                # 首先去除前导和尾随空格
+                processed_df = processed_df.with_columns(
+                    pl.col(time_column).str.strip_chars().alias(time_column)
+                )
                 
-                converted_col = None
-                for fmt in time_formats:
-                    try:
-                        # 尝试当前格式
-                        test_conversion = processed_df.with_columns(
-                            pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
-                        ).collect()
+                # 尝试使用 Polars 的自动日期解析（更智能）
+                try:
+                    test_conversion = processed_df.with_columns(
+                        pl.col(time_column).str.strptime(pl.Datetime, strict=False)
+                    ).collect()
+                    
+                    # 检查转换结果是否有效（非全部为null）
+                    non_null_count = test_conversion[time_column].drop_nulls().len()
+                    if non_null_count > 0:
+                        logging.info(f"时间列 '{time_column}' 自动解析成功，有效值: {non_null_count}")
+                        processed_df = processed_df.with_columns(
+                            pl.col(time_column).str.strptime(pl.Datetime, strict=False)
+                        )
+                        converted_col = time_column
+                    else:
+                        # 如果自动解析失败，尝试具体格式
+                        time_formats = [
+                            "%Y-%m-%d %H:%M:%S%.f",
+                            "%Y-%m-%d %H:%M:%S", 
+                            "%Y-%m-%d",
+                            "%Y/%m/%d %H:%M:%S",
+                            "%Y/%m/%d",
+                            "%m/%d/%Y %H:%M:%S",
+                            "%m/%d/%Y",
+                            "%d/%m/%Y %H:%M:%S",
+                            "%d/%m/%Y"
+                        ]
                         
-                        # 检查转换结果是否有效（非全部为null）
-                        non_null_count = test_conversion[time_column].drop_nulls().len()
-                        if non_null_count > 0:
-                            logging.info(f"时间列 '{time_column}' 使用格式 '{fmt}' 成功转换，有效值: {non_null_count}")
-                            processed_df = processed_df.with_columns(
+                        converted_col = None
+                        for fmt in time_formats:
+                            try:
+                                # 尝试当前格式
+                                test_conversion = processed_df.with_columns(
+                                    pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
+                                ).collect()
+                                
+                                # 检查转换结果是否有效（非全部为null）
+                                non_null_count = test_conversion[time_column].drop_nulls().len()
+                                if non_null_count > 0:
+                                    logging.info(f"时间列 '{time_column}' 使用格式 '{fmt}' 成功转换，有效值: {non_null_count}")
+                                    processed_df = processed_df.with_columns(
+                                        pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
+                                    )
+                                    converted_col = time_column
+                                    break
+                            except Exception:
+                                continue
+                        
+                        if converted_col is None:
+                            warnings_list.append(f"时间列 '{time_column}' 无法转换为日期时间格式，将作为普通列处理")
+                            time_column = None
+                            
+                except Exception as e:
+                    warnings_list.append(f"时间列 '{time_column}' 自动解析失败: {str(e)}")
+                    # 降级到具体格式尝试
+                    time_formats = [
+                        "%Y-%m-%d %H:%M:%S%.f",
+                        "%Y-%m-%d %H:%M:%S", 
+                        "%Y-%m-%d",
+                        "%Y/%m/%d %H:%M:%S",
+                        "%Y/%m/%d",
+                        "%m/%d/%Y %H:%M:%S",
+                        "%m/%d/%Y",
+                        "%d/%m/%Y %H:%M:%S",
+                        "%d/%m/%Y"
+                    ]
+                    
+                    converted_col = None
+                    for fmt in time_formats:
+                        try:
+                            # 尝试当前格式
+                            test_conversion = processed_df.with_columns(
                                 pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
-                            )
-                            converted_col = time_column
-                            break
-                    except Exception:
-                        continue
-                
-                if converted_col is None:
-                    warnings_list.append(f"时间列 '{time_column}' 无法转换为日期时间格式，将作为普通列处理")
-                    time_column = None
+                            ).collect()
+                            
+                            # 检查转换结果是否有效（非全部为null）
+                            non_null_count = test_conversion[time_column].drop_nulls().len()
+                            if non_null_count > 0:
+                                logging.info(f"时间列 '{time_column}' 使用格式 '{fmt}' 成功转换，有效值: {non_null_count}")
+                                processed_df = processed_df.with_columns(
+                                    pl.col(time_column).str.strptime(pl.Datetime, format=fmt, strict=False)
+                                )
+                                converted_col = time_column
+                                break
+                        except Exception:
+                            continue
+                    
+                    if converted_col is None:
+                        warnings_list.append(f"时间列 '{time_column}' 无法转换为日期时间格式，将作为普通列处理")
+                        time_column = None
                     
             except Exception as e:
                 warnings_list.append(f"时间列 '{time_column}' 转换失败: {str(e)}")

@@ -1124,8 +1124,8 @@ function renderPlotlyChart(containerId, chartData) {
             toImageButtonOptions: {
                 format: 'png',
                 filename: `chart_${containerId}`,
-                height: 500,  // 调整为适配2列布局的尺寸
-                width: 800,   // 调整为适配2列布局的尺寸
+                height: 400,  // 调整为适配2列布局的尺寸
+                width: 600,   // 调整为适配2列布局的尺寸
                 scale: 2
             }
         };
